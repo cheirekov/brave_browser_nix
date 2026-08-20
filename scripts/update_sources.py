@@ -11,6 +11,7 @@ import pathlib
 import re
 import subprocess
 import sys
+import warnings
 
 
 def run(*argv: str) -> str:
@@ -24,7 +25,9 @@ def prefetch(url: str) -> str:
 
 
 def deps_from_file(path: pathlib.Path) -> dict[str, str]:
-    tree = ast.parse(path.read_text())
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", SyntaxWarning)
+        tree = ast.parse(path.read_text())
     for node in tree.body:
         if isinstance(node, ast.Assign) and any(
             isinstance(target, ast.Name) and target.id == "deps" for target in node.targets

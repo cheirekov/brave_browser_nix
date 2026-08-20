@@ -29,7 +29,7 @@ jobs:
 
   full-build:
     if: github.event_name == 'workflow_dispatch' && inputs.full_build
-    runs-on: [self-hosted, linux, x64, br-big-build]
+    runs-on: [self-hosted, linux, x64]
     timeout-minutes: 2880
     steps:
       - uses: actions/checkout@v5

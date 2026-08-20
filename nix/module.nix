@@ -13,7 +13,7 @@ in
     enable = lib.mkEnableOption "the br browser";
     package = lib.mkOption {
       type = lib.types.package;
-      default = self.packages.${pkgs.system}.br;
+      default = self.packages.${pkgs.stdenv.hostPlatform.system}.br;
       defaultText = lib.literalExpression "inputs.br.packages.${pkgs.system}.br";
       description = "The br package to install.";
     };
