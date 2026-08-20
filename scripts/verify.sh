@@ -42,6 +42,12 @@ verify_source() {
   grep -Fq 'third_party/devtools-frontend/src/third_party/esbuild/esbuild' \
     "$root/package.nix" \
     || die "package does not expose DevTools' pinned esbuild at its CIPD path"
+  [[ $(jq -r .devtoolsEsbuild.hash "$metadata") == sha256-* ]] \
+    || die "DevTools esbuild binary is not hash-pinned"
+  grep -Fq 'old["devtoolsEsbuild"]' "$root/scripts/update_sources.py" \
+    || die "source updater does not preserve the pinned DevTools esbuild binary"
+  grep -Fq 'brave/script:$(pwd)/tools/grit/grit/extern' "$root/package.nix" \
+    || die "package does not provide Brave's Python module search paths"
   [[ $(jq -r .leo.hash "$metadata") == sha256-* ]] \
     || die "@brave/leo source is not hash-pinned"
   [[ $(jq -r .leoNpmDepsHash "$metadata") == sha256-* ]] \

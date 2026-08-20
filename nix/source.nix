@@ -11,6 +11,7 @@ let
     };
   deps = pkgs.lib.mapAttrs (_path: fetch) metadata.deps;
   core = fetch metadata.core;
+  devtoolsEsbuild = fetch metadata.devtoolsEsbuild;
   leo = fetch metadata.leo;
 
   leoArtifacts = pkgs.buildNpmPackage {
@@ -97,6 +98,7 @@ metadata
     core
     coreNodeModules
     deps
+    devtoolsEsbuild
     leo
     leoArtifacts
     wdpNodeModules

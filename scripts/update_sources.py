@@ -102,6 +102,10 @@ def main() -> int:
         },
         "leoNpmDepsHash": leo_npm_hash
         or "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+        # This matches Chromium's pinned DevTools esbuild version and must be
+        # reviewed when Chromium changes. Preserve it so updates remain
+        # evaluable until that review is made.
+        "devtoolsEsbuild": old["devtoolsEsbuild"],
         "wdpNodeModulesHash": wdp_hash or "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
         "deps": {
             destination: {"url": url, "hash": hashes[destination]}

@@ -112,12 +112,20 @@ let
       # rustc link already installed by nixpkgs' Chromium postPatch.
       ln -s ${pkgs.buildPackages.cargo}/bin/cargo \
         third_party/rust-toolchain/bin/cargo
-      # DevTools' pinned npm graph provides its exact esbuild version; expose it
-      # at the CIPD path referenced by the generated Ninja graph.
+      # DevTools requires its exact platform-specific esbuild binary at a CIPD
+      # path. The generic npm graph omits this optional platform package.
       mkdir -p third_party/devtools-frontend/src/third_party/esbuild
-      ln -s ../../node_modules/esbuild/bin/esbuild \
+      ln -s ${sources.devtoolsEsbuild}/bin/esbuild \
         third_party/devtools-frontend/src/third_party/esbuild/esbuild
       python3 brave/build/util/version.py gen chrome/VERSION
+    '';
+
+    # Brave's command wrapper normally supplies these source-tree Python
+    # paths. Ninja actions patched by Brave import brave_chromium_utils and
+    # must inherit the same environment when built through nixpkgs Chromium.
+    preBuild = (base.preBuild or "") + ''
+      export PYTHONPATH="$(pwd)/brave/script:$(pwd)/tools/grit/grit/extern:$(pwd)/brave/vendor/requests:$(pwd)/brave/third_party/cryptography:$(pwd)/brave/third_party/macholib:$(pwd)/build:$(pwd)/third_party/depot_tools''${PYTHONPATH:+:$PYTHONPATH}"
+      export PYTHONUNBUFFERED=1
     '';
 
     gnFlags = {

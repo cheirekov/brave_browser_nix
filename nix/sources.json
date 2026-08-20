@@ -12,6 +12,10 @@
     "hash": "sha256-z6Ltx77+yiBwYGwnSSda1cZuGqJbQrvlImbmxdHxBRg="
   },
   "leoNpmDepsHash": "sha256-rZ6T4z7j0eMovTYA0fZOkp4ppTEDNPvc+DRnSc90N2U=",
+  "devtoolsEsbuild": {
+    "url": "https://registry.npmjs.org/@esbuild/linux-x64/-/linux-x64-0.25.1.tgz",
+    "hash": "sha256-YpKIKUIyyntwm2UOhBXtzcI6TFVQyfOjMU97DqT122Y="
+  },
   "wdpNodeModulesHash": "sha256-zeq/oEdOt3UmfG7tVVIw7dJKk7g45Nfp3v+AqBtrPzM=",
   "deps": {
     "components/brave_wallet/browser/zcash/rust/librustzcash/src": {
