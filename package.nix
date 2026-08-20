@@ -17,106 +17,122 @@
 let
   sources = import ./nix/source.nix { inherit pkgs; };
 
-  unwrapped = chromium.passthru.mkDerivation (base: {
-    name = "br-browser";
-    version = sources.version;
-    packageName = "br";
-    buildTargets = [ "brave" ];
-    outputs = [
-      "out"
-      "sandbox"
-    ];
+  unwrapped = chromium.passthru.mkDerivation (
+    base:
+    let
+      # Brave's legacy Python patcher rejects a file when a later, otherwise
+      # compatible hunk has already been added by nixpkgs. Apply the only two
+      # overlapping nixpkgs patches after Brave's patch series instead.
+      deferredPatchNames = [
+        "chromium-138-rust-1.86-mismatched_lifetime_syntaxes.patch"
+        "chromium-146-revert-Add-finch-seeds-to-desktop-perf-builds.patch"
+      ];
+      isDeferredPatch = patch: lib.any (name: lib.hasSuffix name (toString patch)) deferredPatchNames;
+      deferredPatches = builtins.filter isDeferredPatch base.patches;
+    in
+    {
+      name = "br-browser";
+      version = sources.version;
+      packageName = "br";
+      buildTargets = [ "brave" ];
+      outputs = [
+        "out"
+        "sandbox"
+      ];
+      patches = builtins.filter (patch: !isDeferredPatch patch) base.patches;
 
-    postUnpack =
-      (base.postUnpack or "")
-      + ''
-        cp -a ${sources.core} src/brave
-        chmod -R u+w src/brave
+      postUnpack =
+        (base.postUnpack or "")
+        + ''
+          cp -a ${sources.core} src/brave
+          chmod -R u+w src/brave
+        ''
+        + lib.concatStringsSep "\n" (
+          lib.mapAttrsToList (path: source: ''
+            mkdir -p "src/brave/${lib.dirOf path}"
+            cp -a ${source} "src/brave/${path}"
+            chmod -R u+w "src/brave/${path}"
+          '') sources.deps
+        )
+        + ''
+          mkdir -p src/brave/vendor/web-discovery-project/.git
+          printf '%s\n' '${sources.deps."vendor/web-discovery-project"}' \
+            > src/brave/vendor/web-discovery-project/.git/HEAD
+        '';
+
+      postPatch = ''
+        export HOME="$TMPDIR/br-home"
+        mkdir -p "$HOME"
+        cp -a ${sources.coreNodeModules}/node_modules brave/
+        chmod -R u+w brave/node_modules
+        cp -a ${sources.coreNodeModules}/npm-cache "$TMPDIR/br-npm-cache"
+        chmod -R u+w "$TMPDIR/br-npm-cache"
+        (
+          cd brave
+          patchShebangs node_modules
+          npm_config_cache="$TMPDIR/br-npm-cache" \
+            npm rebuild --offline --no-audit --no-fund
+          patchShebangs node_modules
+        )
+        mkdir -p brave/vendor/web-discovery-project/node_modules
+        cp -a ${sources.wdpNodeModules}/node_modules/. \
+          brave/vendor/web-discovery-project/node_modules/
+
+        # Brave 1.93.137 accidentally unpacks os.walk() as a two-tuple in its
+        # legacy patch driver.  Fix the pinned helper before asking it to apply
+        # Brave's own Chromium patch series.
+        patch -p1 < ${./patches/0000-fix-brave-patch-walker.patch}
+        python3 brave/script/apply-patches.py
+        ${lib.concatMapStringsSep "\n" (patch: "patch -p1 < ${patch}") deferredPatches}
+        patch -p1 < ${./patches/0001-use-br-user-data-directory.patch}
+        python3 brave/build/util/version.py update chrome/VERSION \
+          --brave-version ${sources.version}
       ''
-      + lib.concatStringsSep "\n" (
-        lib.mapAttrsToList (path: source: ''
-          mkdir -p "src/brave/${lib.dirOf path}"
-          cp -a ${source} "src/brave/${path}"
-          chmod -R u+w "src/brave/${path}"
-        '') sources.deps
-      )
+      + base.postPatch
       + ''
-        mkdir -p src/brave/vendor/web-discovery-project/.git
-        printf '%s\n' '${sources.deps."vendor/web-discovery-project"}' \
-          > src/brave/vendor/web-discovery-project/.git/HEAD
+        python3 brave/build/util/version.py gen chrome/VERSION
       '';
 
-    postPatch = ''
-      export HOME="$TMPDIR/br-home"
-      mkdir -p "$HOME"
-      cp -a ${sources.coreNodeModules}/node_modules brave/
-      chmod -R u+w brave/node_modules
-      cp -a ${sources.coreNodeModules}/npm-cache "$TMPDIR/br-npm-cache"
-      chmod -R u+w "$TMPDIR/br-npm-cache"
-      (
-        cd brave
-        patchShebangs node_modules
-        npm_config_cache="$TMPDIR/br-npm-cache" \
-          npm rebuild --offline --no-audit --no-fund
-        patchShebangs node_modules
-      )
-      mkdir -p brave/vendor/web-discovery-project/node_modules
-      cp -a ${sources.wdpNodeModules}/node_modules/. \
-        brave/vendor/web-discovery-project/node_modules/
+      gnFlags = {
+        # This upstream GN argument generates BUILDFLAG(ENABLE_TOR).
+        enable_tor = false;
+        brave_channel = "";
+        is_brave_release_build = true;
+      };
 
-      # Brave 1.93.137 accidentally unpacks os.walk() as a two-tuple in its
-      # legacy patch driver.  Fix the pinned helper before asking it to apply
-      # Brave's own Chromium patch series.
-      patch -p1 < ${./patches/0000-fix-brave-patch-walker.patch}
-      python3 brave/script/apply-patches.py
-      patch -p1 < ${./patches/0001-use-br-user-data-directory.patch}
-      python3 brave/build/util/version.py update chrome/VERSION \
-        --brave-version ${sources.version}
-    ''
-    + base.postPatch
-    + ''
-      python3 brave/build/util/version.py gen chrome/VERSION
-    '';
+      installPhase = ''
+        runHook preInstall
+        libExecPath="$out/libexec/br"
+        mkdir -p "$libExecPath" "$sandbox/bin"
+        cp -v "$buildPath/"*.so "$buildPath/"*.pak "$buildPath/"*.bin "$libExecPath/"
+        cp -v "$buildPath/libvulkan.so.1" "$buildPath/vk_swiftshader_icd.json" "$libExecPath/"
+        cp -v "$buildPath/icudtl.dat" "$buildPath/chrome_crashpad_handler" "$libExecPath/"
+        cp -vLR "$buildPath/locales" "$buildPath/resources" "$libExecPath/"
+        cp -v "$buildPath/brave" "$libExecPath/br"
+        if find "$buildPath/swiftshader" -maxdepth 1 -name '*.so' -print -quit | grep -q .; then
+          mkdir -p "$libExecPath/swiftshader"
+          cp -v "$buildPath/swiftshader/"*.so "$libExecPath/swiftshader/"
+        fi
+        cp -v "$buildPath/brave_sandbox" "$sandbox/bin/br-sandbox"
+        mkdir -p "$out/share/br"
+        cp -v "$buildPath/args.gn" "$out/share/br/build-args.gn"
+        runHook postInstall
+      '';
 
-    gnFlags = {
-      # This upstream GN argument generates BUILDFLAG(ENABLE_TOR).
-      enable_tor = false;
-      brave_channel = "";
-      is_brave_release_build = true;
-    };
-
-    installPhase = ''
-      runHook preInstall
-      libExecPath="$out/libexec/br"
-      mkdir -p "$libExecPath" "$sandbox/bin"
-      cp -v "$buildPath/"*.so "$buildPath/"*.pak "$buildPath/"*.bin "$libExecPath/"
-      cp -v "$buildPath/libvulkan.so.1" "$buildPath/vk_swiftshader_icd.json" "$libExecPath/"
-      cp -v "$buildPath/icudtl.dat" "$buildPath/chrome_crashpad_handler" "$libExecPath/"
-      cp -vLR "$buildPath/locales" "$buildPath/resources" "$libExecPath/"
-      cp -v "$buildPath/brave" "$libExecPath/br"
-      if find "$buildPath/swiftshader" -maxdepth 1 -name '*.so' -print -quit | grep -q .; then
-        mkdir -p "$libExecPath/swiftshader"
-        cp -v "$buildPath/swiftshader/"*.so "$libExecPath/swiftshader/"
-      fi
-      cp -v "$buildPath/brave_sandbox" "$sandbox/bin/br-sandbox"
-      mkdir -p "$out/share/br"
-      cp -v "$buildPath/args.gn" "$out/share/br/build-args.gn"
-      runHook postInstall
-    '';
-
-    passthru = {
-      inherit sources;
-      sandboxExecutableName = "br-sandbox";
-    };
-    requiredSystemFeatures = [ "big-parallel" ];
-    meta = {
-      description = "Downstream Brave build compiled without Tor support";
-      homepage = "https://github.com/brave/brave-core";
-      license = lib.licenses.mpl20;
-      platforms = [ "x86_64-linux" ];
-      sourceProvenance = [ lib.sourceTypes.fromSource ];
-    };
-  });
+      passthru = {
+        inherit sources;
+        sandboxExecutableName = "br-sandbox";
+      };
+      requiredSystemFeatures = [ "big-parallel" ];
+      meta = {
+        description = "Downstream Brave build compiled without Tor support";
+        homepage = "https://github.com/brave/brave-core";
+        license = lib.licenses.mpl20;
+        platforms = [ "x86_64-linux" ];
+        sourceProvenance = [ lib.sourceTypes.fromSource ];
+      };
+    }
+  );
 
   libPath = lib.makeLibraryPath [
     libva

@@ -28,6 +28,8 @@ verify_source() {
   [[ $(grep -nF '0000-fix-brave-patch-walker.patch' "$root/package.nix" | head -n1 | cut -d: -f1) \
       -lt $(grep -nF 'python3 brave/script/apply-patches.py' "$root/package.nix" | head -n1 | cut -d: -f1) ]] \
     || die "Brave patch walker fix is not applied before the patch driver"
+  grep -Fq 'deferredPatches = builtins.filter isDeferredPatch base.patches' "$root/package.nix" \
+    || die "overlapping nixpkgs patches are not deferred"
   [[ $(jq -r .coreNodeModulesHash "$metadata") == sha256-* ]] \
     || die "core node_modules output is not hash-pinned"
   ! grep -R -Fq -- '--impure' "$root/package.nix" "$root/nix" \

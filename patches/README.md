@@ -5,6 +5,11 @@ patch driver. Its two `os.walk()` loops unpack only two values, although Python
 returns `(root, directories, files)`. The compatibility patch adds the ignored
 directory value so Brave's own Chromium patch series can be applied.
 
+Two nixpkgs patches touch files that are also modified by Brave. They are
+preserved, but applied with GNU `patch` immediately after Brave's series. This
+ordering avoids a limitation in Brave's legacy Python patcher while retaining
+the nixpkgs Rust warning and test-build compatibility fixes.
+
 `0001-use-br-user-data-directory.patch` changes Brave's Linux default user-data
 directory from `BraveSoftware/Brave-Browser` to `br`. The wrapper also passes
 the same directory explicitly. Patching the default is still necessary because
