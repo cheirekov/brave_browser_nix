@@ -21,6 +21,10 @@ verify_source() {
     || die "package does not select the community/source build mode"
   grep -Eq 'use_mold[[:space:]]*=[[:space:]]*false' "$root/package.nix" \
     || die "package does not disable Chromium's unavailable CIPD mold linker"
+  grep -Fq 'cc_wrapper = "${redirectCC}"' "$root/package.nix" \
+    || die "package does not redirect Brave chromium_src compilation units"
+  [[ -f $root/nix/redirect-cc.sh ]] \
+    || die "Brave chromium_src compiler redirect wrapper is missing"
   for defaults in brave_defaults blink_platform_defaults branding_defaults desktop_defaults; do
     grep -Fq "//brave/build/args/$defaults.gni" "$root/package.nix" \
       || die "package does not import Brave's $defaults GN defaults"
@@ -85,6 +89,8 @@ verify_result() {
     || die "recorded GN arguments do not select the community/source build mode"
   grep -Eq '^use_mold[[:space:]]*=[[:space:]]*false$' "$result/share/br/build-args.gn" \
     || die "recorded GN arguments do not disable the unavailable CIPD mold linker"
+  grep -Eq '^cc_wrapper[[:space:]]*=' "$result/share/br/build-args.gn" \
+    || die "recorded GN arguments do not enable chromium_src redirection"
   grep -Fq 'user-data-dir="$profile_root/br"' "$result/bin/br" \
     || die "installed wrapper does not isolate the profile"
   grep -Eq '^Name=BR$' "$result/share/applications/br.desktop" \

@@ -23,6 +23,7 @@ let
     ''import("//brave/build/args/branding_defaults.gni")''
     ''import("//brave/build/args/desktop_defaults.gni")''
   ];
+  redirectCC = pkgs.writeShellScript "brave-redirect-cc" (builtins.readFile ./nix/redirect-cc.sh);
 
   unwrappedBase = chromium.passthru.mkDerivation (base: {
     name = "br-browser";
@@ -138,6 +139,10 @@ let
       # Chromium defaults community Linux builds to its downloaded CIPD mold.
       # Nixpkgs already supplies lld through the system LLVM toolchain.
       use_mold = false;
+      # Brave normally redirects Chromium compilation units through Siso so
+      # matching brave/chromium_src wrappers are compiled instead. Nixpkgs
+      # builds with Ninja, so provide the equivalent compiler wrapper.
+      cc_wrapper = "${redirectCC}";
     };
 
     installPhase = ''
