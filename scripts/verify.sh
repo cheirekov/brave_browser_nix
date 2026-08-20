@@ -17,12 +17,24 @@ verify_source() {
     || die "a Brave DEPS source is missing its hash"
   grep -Eq 'enable_tor[[:space:]]*=[[:space:]]*false' "$root/package.nix" \
     || die "package does not set enable_tor=false"
+  grep -Eq 'is_official_build[[:space:]]*=[[:space:]]*false' "$root/package.nix" \
+    || die "package does not select the community/source build mode"
+  for defaults in brave_defaults blink_platform_defaults branding_defaults desktop_defaults; do
+    grep -Fq "//brave/build/args/$defaults.gni" "$root/package.nix" \
+      || die "package does not import Brave's $defaults GN defaults"
+  done
   grep -Fq 'BUILDFLAG(ENABLE_TOR)' "$root/README.md" \
     || die "Tor build flag mapping is not documented"
   grep -Fq 'user-data-dir="$profile_root/br"' "$root/nix/br-wrapper.sh" \
     || die "wrapper does not isolate the profile"
   grep -Fq 'config_dir.Append("br")' "$root/patches/0001-use-br-user-data-directory.patch" \
     || die "compiled default profile path is not patched to br"
+  grep -Fq 'rebase_path(installer_sysroot, root_build_dir)' \
+    "$root/patches/0002-allow-linux-installer-without-sysroot.patch" \
+    || die "Linux installer targets do not support the distro build without a sysroot"
+  grep -Fq "import branding from './brave/build/commands/lib/branding.js'" \
+    "$root/package.nix" \
+    || die "package does not run Brave's branding preparation step"
   [[ $(grep -Fc 'for root, _, files in' "$root/patches/0000-fix-brave-patch-walker.patch") == 2 ]] \
     || die "Brave patch walker compatibility fix is incomplete"
   [[ $(grep -nF '0000-fix-brave-patch-walker.patch' "$root/package.nix" | head -n1 | cut -d: -f1) \
@@ -46,6 +58,8 @@ verify_result() {
   [[ -f $result/share/br/build-args.gn ]] || die "missing recorded GN arguments"
   grep -Eq '^enable_tor[[:space:]]*=[[:space:]]*false$' "$result/share/br/build-args.gn" \
     || die "recorded GN arguments do not contain enable_tor=false"
+  grep -Eq '^is_official_build[[:space:]]*=[[:space:]]*false$' "$result/share/br/build-args.gn" \
+    || die "recorded GN arguments do not select the community/source build mode"
   grep -Fq 'user-data-dir="$profile_root/br"' "$result/bin/br" \
     || die "installed wrapper does not isolate the profile"
   grep -Eq '^Name=BR$' "$result/share/applications/br.desktop" \

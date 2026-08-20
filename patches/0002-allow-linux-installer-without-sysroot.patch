@@ -1,0 +1,42 @@
+diff --git a/chrome/installer/linux/BUILD.gn b/chrome/installer/linux/BUILD.gn
+--- a/chrome/installer/linux/BUILD.gn
++++ b/chrome/installer/linux/BUILD.gn
+@@ -23,4 +23,12 @@ import("//brave/build/config.gni")
+ 
++# Distro builds compile against the host libraries and intentionally disable
++# Chromium's downloaded sysroot.  Keep the installer targets valid at GN
++# generation time even when they are not part of the requested build target.
++installer_sysroot = sysroot
++if (installer_sysroot == "") {
++  installer_sysroot = "/"
++}
++
+ if (bundle_widevine_cdm) {
+   import("//media/cdm/library_cdm/cdm_paths.gni")
+ }
+@@ -137,6 +145,6 @@ action_foreach("calculate_deb_dependencies") {
+   args = [
+     "{{source}}",
+-    rebase_path(sysroot, root_build_dir),
++    rebase_path(installer_sysroot, root_build_dir),
+     target_cpu,
+     "deb_{{source_name_part}}.deps",
+   ]
+@@ -327,7 +333,7 @@ action("repo_deb") {
+     "-o",
+     rebase_path(root_out_dir, root_build_dir),
+     "-s",
+-    rebase_path(sysroot, root_build_dir),
++    rebase_path(installer_sysroot, root_build_dir),
+     "-t",
+     target_os,
+   ]
+@@ -560,8 +568,8 @@ template("linux_package") {
+       "-o",
+       rebase_path(root_out_dir, root_build_dir),
+       "-s",
+-      rebase_path(sysroot, root_build_dir),
++      rebase_path(installer_sysroot, root_build_dir),
+       "-t",
+       target_os,
+       "--xz-nthreads",

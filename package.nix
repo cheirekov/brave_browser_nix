@@ -17,8 +17,14 @@
 let
   sources = import ./nix/source.nix { inherit pkgs; };
   braveVersionParts = lib.splitString "." sources.version;
+  braveGnImports = lib.concatStringsSep " " [
+    ''import("//brave/build/args/brave_defaults.gni")''
+    ''import("//brave/build/args/blink_platform_defaults.gni")''
+    ''import("//brave/build/args/branding_defaults.gni")''
+    ''import("//brave/build/args/desktop_defaults.gni")''
+  ];
 
-  unwrapped = chromium.passthru.mkDerivation (base: {
+  unwrappedBase = chromium.passthru.mkDerivation (base: {
     name = "br-browser";
     version = sources.version;
     packageName = "br";
@@ -76,6 +82,17 @@ let
       patch -p1 < ${./patches/0000-fix-brave-patch-walker.patch}
       python3 brave/script/apply-patches.py
       patch -p1 < ${./patches/0001-use-br-user-data-directory.patch}
+      patch -p1 < ${./patches/0002-allow-linux-installer-without-sysroot.patch}
+
+      # The upstream build command copies Brave's branding files into their
+      # Chromium destinations immediately before GN generation.
+      node --input-type=module <<'EOF'
+      import config from './brave/build/commands/lib/config.ts'
+      import branding from './brave/build/commands/lib/branding.js'
+      config.channel = ""
+      branding.update()
+      EOF
+
       cp chrome/VERSION chrome/VERSION.chromium
       sed -i \
         -e 's/^MINOR=.*/MINOR=${builtins.elemAt braveVersionParts 0}/' \
@@ -92,7 +109,9 @@ let
       # This upstream GN argument generates BUILDFLAG(ENABLE_TOR).
       enable_tor = false;
       brave_channel = "";
-      is_brave_release_build = true;
+      # Official Brave builds require private service keys which are not part
+      # of the public source tree. Build the supported community/source variant.
+      is_official_build = false;
     };
 
     installPhase = ''
@@ -126,6 +145,15 @@ let
       platforms = [ "x86_64-linux" ];
       sourceProvenance = [ lib.sourceTypes.fromSource ];
     };
+  });
+
+  # Brave's own build command imports these defaults before adding individual
+  # GN arguments. chromium.passthru.mkDerivation accepts only key/value flags,
+  # so prepend the imports to the generated --args string afterwards.
+  unwrapped = unwrappedBase.overrideAttrs (old: {
+    configurePhase =
+      builtins.replaceStrings [ "gn gen --args='" ] [ "gn gen --args='${braveGnImports} " ]
+        old.configurePhase;
   });
 
   libPath = lib.makeLibraryPath [

@@ -6,6 +6,8 @@ upstream source with Brave's Tor functionality disabled.
 This project is unofficial, is not affiliated with or endorsed by Brave
 Software, and is not an official Brave distribution. The neutral `BR` desktop
 icon is used to avoid presenting the downstream package as an official build.
+It is built in Brave's community/source mode because the private service keys
+required by official builds are not distributed with the public source tree.
 
 ## Installation
 
