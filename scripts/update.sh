@@ -63,6 +63,18 @@ if [[ $pinned_chromium != "$chromium_version" ]]; then
   exit 1
 fi
 
+core_npm_log="$temporary/core-npm.log"
+if ! (cd "$repo_root" && nix build --no-link --impure --expr \
+  'let f = builtins.getFlake (toString ./.); pkgs = import f.inputs.nixpkgs { system = "x86_64-linux"; }; in (import ./nix/source.nix { inherit pkgs; }).coreNodeModules') \
+  >"$core_npm_log" 2>&1; then
+  got=$(sed -n 's/^[[:space:]]*got:[[:space:]]*\(sha256-[^[:space:]]*\)$/\1/p' "$core_npm_log" | tail -1)
+  [[ -n $got ]] || { cat "$core_npm_log" >&2; exit 1; }
+  jq --arg hash "$got" '.coreNodeModulesHash = $hash' "$metadata" > "$temporary/sources.updated.json"
+  cp "$temporary/sources.updated.json" "$metadata"
+  (cd "$repo_root" && nix build --no-link --impure --expr \
+    'let f = builtins.getFlake (toString ./.); pkgs = import f.inputs.nixpkgs { system = "x86_64-linux"; }; in (import ./nix/source.nix { inherit pkgs; }).coreNodeModules')
+fi
+
 wdp_log="$temporary/wdp.log"
 if ! (cd "$repo_root" && nix build --no-link --impure --expr \
   'let f = builtins.getFlake (toString ./.); pkgs = import f.inputs.nixpkgs { system = "x86_64-linux"; }; in (import ./nix/source.nix { inherit pkgs; }).wdpNodeModules') \

@@ -58,6 +58,8 @@
               ${nixpkgs.lib.escapeShellArg sourceMetadata.version}
             touch "$out"
           '';
+
+          npm-dependencies = package.unwrapped.passthru.sources.coreNodeModules;
         }
       );
 

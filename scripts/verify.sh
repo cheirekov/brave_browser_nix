@@ -23,6 +23,8 @@ verify_source() {
     || die "wrapper does not isolate the profile"
   grep -Fq 'config_dir.Append("br")' "$root/patches/0001-use-br-user-data-directory.patch" \
     || die "compiled default profile path is not patched to br"
+  [[ $(jq -r .coreNodeModulesHash "$metadata") == sha256-* ]] \
+    || die "core node_modules output is not hash-pinned"
   ! grep -R -Fq -- '--impure' "$root/package.nix" "$root/nix" \
     || die "normal package evaluation is impure"
   printf 'source policy: ok\n'

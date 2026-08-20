@@ -6,7 +6,7 @@
     "url": "https://github.com/brave/brave-core/archive/refs/tags/v1.93.137.tar.gz",
     "hash": "sha256-FKkSt7GqqWmJW6LPUU6Tp9Dr5gnkbtq/IVJZFejC014="
   },
-  "npmHash": "sha256-r/Yq3hqRQ3GHjnKmidGL1KVl+c4JkttZ9ZlKifjLQ8E=",
+  "coreNodeModulesHash": "sha256-2f8+Oz3+EIeUkdqguu3U6uKwy4+ewkqikDVS9yEtdJM=",
   "wdpNodeModulesHash": "sha256-zeq/oEdOt3UmfG7tVVIw7dJKk7g45Nfp3v+AqBtrPzM=",
   "deps": {
     "components/brave_wallet/browser/zcash/rust/librustzcash/src": {

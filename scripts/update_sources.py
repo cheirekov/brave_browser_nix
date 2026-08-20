@@ -8,7 +8,6 @@ import ast
 import concurrent.futures
 import json
 import pathlib
-import re
 import subprocess
 import sys
 import warnings
@@ -51,17 +50,6 @@ def deps_from_file(path: pathlib.Path) -> dict[str, str]:
     return result
 
 
-def npm_hash(lockfile: pathlib.Path) -> str:
-    output = run(
-        "nix", "shell", "nixpkgs#prefetch-npm-deps", "-c",
-        "prefetch-npm-deps", str(lockfile),
-    )
-    hashes = re.findall(r"sha256-[A-Za-z0-9+/]{43}=", output)
-    if not hashes:
-        raise RuntimeError("prefetch-npm-deps did not return a hash")
-    return hashes[-1]
-
-
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--version", required=True)
@@ -80,6 +68,8 @@ def main() -> int:
         hashes = dict(zip(urls, pool.map(prefetch, urls.values()), strict=True))
 
     old = json.loads(args.output.read_text()) if args.output.exists() else {}
+    old_core = old.get("core", {}).get("url")
+    new_core = f"https://github.com/brave/brave-core/archive/refs/tags/v{args.version}.tar.gz"
     old_wdp = old.get("deps", {}).get("vendor/web-discovery-project", {}).get("url")
     new_wdp = urls.get("vendor/web-discovery-project")
     wdp_hash = old.get("wdpNodeModulesHash") if old_wdp == new_wdp else None
@@ -89,10 +79,12 @@ def main() -> int:
         "tag": f"v{args.version}",
         "chromiumVersion": chromium_version,
         "core": {
-            "url": f"https://github.com/brave/brave-core/archive/refs/tags/v{args.version}.tar.gz",
+            "url": new_core,
             "hash": args.core_hash,
         },
-        "npmHash": npm_hash(args.core / "package-lock.json"),
+        "coreNodeModulesHash": old.get("coreNodeModulesHash")
+        if old_core == new_core
+        else "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
         "wdpNodeModulesHash": wdp_hash or "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
         "deps": {
             destination: {"url": url, "hash": hashes[destination]}

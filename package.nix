@@ -49,13 +49,16 @@ let
     postPatch = ''
       export HOME="$TMPDIR/br-home"
       mkdir -p "$HOME"
+      cp -a ${sources.coreNodeModules}/node_modules brave/
+      chmod -R u+w brave/node_modules
+      cp -a ${sources.coreNodeModules}/npm-cache "$TMPDIR/br-npm-cache"
+      chmod -R u+w "$TMPDIR/br-npm-cache"
       (
         cd brave
-        npm_config_cache=${sources.npmDeps} \
-          npm ci --offline --ignore-scripts --no-audit --no-fund
         patchShebangs node_modules
-        npm_config_cache=${sources.npmDeps} \
+        npm_config_cache="$TMPDIR/br-npm-cache" \
           npm rebuild --offline --no-audit --no-fund
+        patchShebangs node_modules
       )
       mkdir -p brave/vendor/web-discovery-project/node_modules
       cp -a ${sources.wdpNodeModules}/node_modules/. \

@@ -87,6 +87,16 @@ Chromium version. nixpkgs assembles that graph from individually hashed Gitiles
 sources; no `gclient` download or other network access occurs in the browser
 build.
 
+Core npm dependencies are realized as the separate fixed-output
+`coreNodeModules` derivation. This is necessary because Brave includes git
+dependencies whose nested legacy lockfiles cannot be represented correctly by
+the current nixpkgs npm cache fetcher. Network access is confined to that
+hash-pinned dependency derivation; the Chromium/Brave compilation consumes its
+immutable node tree and npm cache offline. Store-specific shebang patching and
+native module rebuilds happen only in the normal sandboxed browser derivation,
+not in the fixed-output dependency result. The npm bootstrap can therefore be
+validated without unpacking or compiling Chromium.
+
 Brave currently declares `enable_tor` in
 `components/tor/buildflags/buildflags.gni`. Its buildflag target maps that GN
 argument to `BUILDFLAG(ENABLE_TOR)`, which guards the Tor services, commands,
