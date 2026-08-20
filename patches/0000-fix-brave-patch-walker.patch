@@ -1,10 +1,32 @@
 diff --git a/brave/script/apply-patches.py b/brave/script/apply-patches.py
-index 9656e40416..324177d602 100755
+index 9656e40416..d70da8ea82 100755
 --- a/brave/script/apply-patches.py
 +++ b/brave/script/apply-patches.py
+@@ -12 +12 @@ SRC_DIR = os.path.join(SOURCE_ROOT, '..', '..', 'src')
+-PATCH_PY = os.path.join(VENDOR_DIR, 'python-patch', 'patch.py')
++PATCH = 'patch'
 @@ -27 +27 @@ def apply_patches_for_dir(directory):
 -    for root, files in os.walk(directory):
 +    for root, _, files in os.walk(directory):
-@@ -40 +40 @@ def revert_changes_for_dir(directory):
+@@ -28,6 +28,7 @@ def apply_patches_for_dir(directory):
+         prefix = os.path.relpath(root, directory)
+         target = os.path.join(SRC_DIR, prefix)
+-        args = [sys.executable, PATCH_PY, '--directory', target, '--quiet']
++        args = [PATCH, '--directory', target, '--strip=1', '--batch',
++                '--forward', '--silent', '--input']
+         for name in sorted(files):
+             if not name.endswith('.patch'):
+                 continue
+@@ -40 +41 @@ def revert_changes_for_dir(directory):
 -    for root, files in reversed(list(os.walk(directory))):
 +    for root, _, files in reversed(list(os.walk(directory))):
+@@ -41,7 +42,7 @@ def revert_changes_for_dir(directory):
+         prefix = os.path.relpath(root, directory)
+         target = os.path.join(SRC_DIR, prefix)
+-        args = [sys.executable, PATCH_PY, '--directory', target, '--quiet',
+-                '--revert']
++        args = [PATCH, '--directory', target, '--strip=1', '--batch',
++                '--reverse', '--silent', '--input']
+         for name in reversed(sorted(files)):
+             if not name.endswith('.patch'):
+                 continue

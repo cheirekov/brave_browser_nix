@@ -97,6 +97,10 @@ native module rebuilds happen only in the normal sandboxed browser derivation,
 not in the fixed-output dependency result. The npm bootstrap can therefore be
 validated without unpacking or compiling Chromium.
 
+The Web Discovery dependency is handled by its own fixed-output derivation.
+Both its npm tree and the patched generated `modules` tree are copied into the
+writable build source before Brave's patch and build phases.
+
 Brave currently declares `enable_tor` in
 `components/tor/buildflags/buildflags.gni`. Its buildflag target maps that GN
 argument to `BUILDFLAG(ENABLE_TOR)`, which guards the Tor services, commands,

@@ -16,6 +16,7 @@
 }:
 let
   sources = import ./nix/source.nix { inherit pkgs; };
+  braveVersionParts = lib.splitString "." sources.version;
 
   unwrapped = chromium.passthru.mkDerivation (base: {
     name = "br-browser";
@@ -26,7 +27,6 @@ let
       "out"
       "sandbox"
     ];
-
     postUnpack =
       (base.postUnpack or "")
       + ''
@@ -63,6 +63,12 @@ let
       mkdir -p brave/vendor/web-discovery-project/node_modules
       cp -a ${sources.wdpNodeModules}/node_modules/. \
         brave/vendor/web-discovery-project/node_modules/
+      rm -rf brave/vendor/web-discovery-project/modules
+      cp -a ${sources.wdpNodeModules}/modules \
+        brave/vendor/web-discovery-project/modules
+      chmod -R u+w \
+        brave/vendor/web-discovery-project/node_modules \
+        brave/vendor/web-discovery-project/modules
 
       # Brave 1.93.137 accidentally unpacks os.walk() as a two-tuple in its
       # legacy patch driver.  Fix the pinned helper before asking it to apply
@@ -70,8 +76,12 @@ let
       patch -p1 < ${./patches/0000-fix-brave-patch-walker.patch}
       python3 brave/script/apply-patches.py
       patch -p1 < ${./patches/0001-use-br-user-data-directory.patch}
-      python3 brave/build/util/version.py update chrome/VERSION \
-        --brave-version ${sources.version}
+      cp chrome/VERSION chrome/VERSION.chromium
+      sed -i \
+        -e 's/^MINOR=.*/MINOR=${builtins.elemAt braveVersionParts 0}/' \
+        -e 's/^BUILD=.*/BUILD=${builtins.elemAt braveVersionParts 1}/' \
+        -e 's/^PATCH=.*/PATCH=${builtins.elemAt braveVersionParts 2}/' \
+        chrome/VERSION
     ''
     + base.postPatch
     + ''
