@@ -62,6 +62,7 @@ let
         brave/vendor/web-discovery-project/node_modules/
 
       python3 brave/script/apply-patches.py
+      patch -p1 < ${./patches/0001-use-br-user-data-directory.patch}
       python3 brave/build/util/version.py update chrome/VERSION \
         --brave-version ${sources.version}
     ''

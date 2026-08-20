@@ -1,0 +1,20 @@
+diff --git a/brave/chromium_src/chrome/common/chrome_paths_linux.cc b/brave/chromium_src/chrome/common/chrome_paths_linux.cc
+index 3d15153843..712678582f 100644
+--- a/brave/chromium_src/chrome/common/chrome_paths_linux.cc
++++ b/brave/chromium_src/chrome/common/chrome_paths_linux.cc
+@@ -18,14 +18,7 @@ bool GetDefaultUserDataDirectory(base::FilePath* result) {
+   config_dir =
+       GetXDGDirectory(env.get(), kXdgConfigHomeEnvVar, kDotConfigDir);
+ 
+-  std::string data_dir_suffix;
+-  brave::GetChannelImpl(nullptr, &data_dir_suffix);
+-
+-#if BUILDFLAG(IS_BRAVE_ORIGIN_BRANDED)
+-  *result = config_dir.Append("BraveSoftware/Brave-Origin" + data_dir_suffix);
+-#else
+-  *result = config_dir.Append("BraveSoftware/Brave-Browser" + data_dir_suffix);
+-#endif
++  *result = config_dir.Append("br");
+   return true;
+ }
+ 

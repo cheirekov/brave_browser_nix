@@ -21,6 +21,8 @@ verify_source() {
     || die "Tor build flag mapping is not documented"
   grep -Fq 'user-data-dir="$profile_root/br"' "$root/nix/br-wrapper.sh" \
     || die "wrapper does not isolate the profile"
+  grep -Fq 'config_dir.Append("br")' "$root/patches/0001-use-br-user-data-directory.patch" \
+    || die "compiled default profile path is not patched to br"
   ! grep -R -Fq -- '--impure' "$root/package.nix" "$root/nix" \
     || die "normal package evaluation is impure"
   printf 'source policy: ok\n'

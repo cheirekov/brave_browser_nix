@@ -91,13 +91,17 @@ Brave currently declares `enable_tor` in
 `components/tor/buildflags/buildflags.gni`. Its buildflag target maps that GN
 argument to `BUILDFLAG(ENABLE_TOR)`, which guards the Tor services, commands,
 and UI call sites. The package passes `enable_tor=false` to GN. No policy,
-runtime preference, binary removal, or downstream source patch is used.
+runtime preference, or binary removal is used to disable Tor.
 
-The executable and desktop file are named `br`. Source-level Brave branding is
+The executable and desktop file are named `br`. Most source-level Brave branding is
 left intact to minimize trademark and maintenance risk. The wrapper always
 passes `--user-data-dir="${XDG_CONFIG_HOME:-$HOME/.config}/br"`, so it does not
 share upstream Brave's Linux profile at
 `${XDG_CONFIG_HOME:-$HOME/.config}/BraveSoftware/Brave-Browser`.
+A small downstream patch changes the compiled Linux default to the same `br`
+path, preventing subsystems which bypass the command-line override from
+recreating the upstream directory. Chromium consequently maps the cache to
+`${XDG_CACHE_HOME:-$HOME/.cache}/br`.
 
 All downstream modifications are described in this README and
 [`patches/README.md`](patches/README.md): the GN argument, output packaging,
