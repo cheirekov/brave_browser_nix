@@ -1,0 +1,69 @@
+name: update Brave stable
+
+on:
+  schedule:
+    - cron: "23 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: update-brave-stable
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+      - id: check
+        run: ./scripts/update.sh --check
+      - if: steps.check.outputs.update_available == 'true'
+        id: update
+        run: ./scripts/update.sh
+      - if: steps.check.outputs.update_available == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OLD_VERSION: ${{ steps.check.outputs.old_version }}
+          NEW_VERSION: ${{ steps.check.outputs.new_version }}
+        run: |
+          branch="automation/brave-${NEW_VERSION}"
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git switch -C "$branch"
+          git add flake.lock nix/sources.json
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "brave: update upstream to ${NEW_VERSION}"
+          git push --force-with-lease --set-upstream origin "$branch"
+
+          chromium=$(jq -r .chromiumVersion nix/sources.json)
+          core_hash=$(jq -r .core.hash nix/sources.json)
+          body=$(mktemp)
+          printf '%s\n' \
+            "Automated Brave Stable update." \
+            "" \
+            "- Previous Brave version: ${OLD_VERSION}" \
+            "- New Brave version: ${NEW_VERSION}" \
+            "- Upstream tag/revision: v${NEW_VERSION}" \
+            "- Chromium revision: ${chromium}" \
+            "- brave-core source hash: ${core_hash}" \
+            "- Verification: nix flake check and source verification passed" \
+            "- Full browser build performed: no (requires the manual self-hosted job)" \
+            > "$body"
+
+          if gh pr view "$branch" --json number >/dev/null 2>&1; then
+            gh pr edit "$branch" --title "brave: update upstream to ${NEW_VERSION}" --body-file "$body"
+          else
+            gh pr create --base main --head "$branch" \
+              --title "brave: update upstream to ${NEW_VERSION}" --body-file "$body"
+          fi

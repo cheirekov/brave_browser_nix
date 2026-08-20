@@ -1,0 +1,61 @@
+{
+  "version": "1.93.137",
+  "tag": "v1.93.137",
+  "chromiumVersion": "151.0.7922.169",
+  "core": {
+    "url": "https://github.com/brave/brave-core/archive/refs/tags/v1.93.137.tar.gz",
+    "hash": "sha256-FKkSt7GqqWmJW6LPUU6Tp9Dr5gnkbtq/IVJZFejC014="
+  },
+  "npmHash": "sha256-r/Yq3hqRQ3GHjnKmidGL1KVl+c4JkttZ9ZlKifjLQ8E=",
+  "wdpNodeModulesHash": "sha256-zeq/oEdOt3UmfG7tVVIw7dJKk7g45Nfp3v+AqBtrPzM=",
+  "deps": {
+    "components/brave_wallet/browser/zcash/rust/librustzcash/src": {
+      "url": "https://github.com/brave/librustzcash/archive/f34cb36d9287b76b52ba1a2ab58e50db96706dc8.tar.gz",
+      "hash": "sha256-JVA/FjShfEz8T0DWTmviNX50g5PJn1JATRKZ4K+tYHw="
+    },
+    "third_party/argon2/src": {
+      "url": "https://github.com/P-H-C/phc-winner-argon2/archive/62358ba2123abd17fccf2a108a301d4b52c01a7c.tar.gz",
+      "hash": "sha256-cYipidr4SRfalfzIj7INl5zOo29dRr+AlilWYFvymVw="
+    },
+    "third_party/bip39wally-core-native": {
+      "url": "https://github.com/brave-intl/bat-native-bip39wally-core/archive/547a7810333d821e29b8f55126aba031aa0d5fcd.tar.gz",
+      "hash": "sha256-AOmhevaM+q+yDSulvziy4P3z/0NLfgGIem2ePegyrjg="
+    },
+    "third_party/bitcoin-core/src": {
+      "url": "https://github.com/bitcoin/bitcoin/archive/8105bce5b384c72cf08b25b7c5343622754e7337.tar.gz",
+      "hash": "sha256-gVrgFgxjepqlbFLFS50lTgOCSQac2wvaeVO6c8UcJ94="
+    },
+    "third_party/ethash/src": {
+      "url": "https://github.com/chfast/ethash/archive/e4a15c3d76dc09392c7efd3e30d84ee3b871e9ce.tar.gz",
+      "hash": "sha256-N30v9OZwTmDbltPPmeSa0uOGJhos1VzyS5zY9vVCWfA="
+    },
+    "third_party/playlist_component/src": {
+      "url": "https://github.com/brave/playlist-component/archive/673d40f017a1559bb685a15cf608ad1d4a94f8fb.tar.gz",
+      "hash": "sha256-7s2zRLduuwiylSk/LGJNHoFoh4Yvokgp9+NB3F4tFJk="
+    },
+    "third_party/reclient_configs/src": {
+      "url": "https://github.com/EngFlow/reclient-configs/archive/21c8fe69ff771956c179847b8c1d9fd216181967.tar.gz",
+      "hash": "sha256-oRlp0yPtrl2SjxOfot4XYKX5QPcdP62nzO29smcDH5E="
+    },
+    "third_party/rust/futures_retry/v0_5/crate": {
+      "url": "https://github.com/brave-intl/futures-retry/archive/2aaaafbc3d394661534d4dbd14159d164243c20e.tar.gz",
+      "hash": "sha256-etkiFKabiuE3KwCRZ6x1Gg7XjYsHmqn5TacaSQgC+ck="
+    },
+    "vendor/bat-native-tweetnacl": {
+      "url": "https://github.com/brave-intl/bat-native-tweetnacl/archive/8b424ccf29957fe01c88c36076fd32006a357887.tar.gz",
+      "hash": "sha256-vb+hlRkJa/V9qdH1DzRIEchARtBxGOwLql7Qc33ec0k="
+    },
+    "vendor/gn-project-generators": {
+      "url": "https://github.com/brave/gn-project-generators/archive/b76e14b162aa0ce40f11920ec94bfc12da29e5d0.tar.gz",
+      "hash": "sha256-9nWqO24XOl+SLd8RovlYZYQgLc5ET2uc96JEGBLr/5s="
+    },
+    "vendor/python-patch": {
+      "url": "https://github.com/brave/python-patch/archive/d8880110be6554686bc08261766538c2926d4e82.tar.gz",
+      "hash": "sha256-pjq0/j6Qg10rn68fBZFypqKGiqGWnZ7u/NV7U155iTk="
+    },
+    "vendor/web-discovery-project": {
+      "url": "https://github.com/brave/web-discovery-project/archive/9eaf91916b25186ba613af030ffe6a8bb9984e6f.tar.gz",
+      "hash": "sha256-fldeuh8QctxsTTkP6q/xfd8T5ah5K9crcXKNphpoui4="
+    }
+  }
+}
