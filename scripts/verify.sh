@@ -23,6 +23,11 @@ verify_source() {
     || die "wrapper does not isolate the profile"
   grep -Fq 'config_dir.Append("br")' "$root/patches/0001-use-br-user-data-directory.patch" \
     || die "compiled default profile path is not patched to br"
+  [[ $(grep -Fc 'for root, _, files in' "$root/patches/0000-fix-brave-patch-walker.patch") == 2 ]] \
+    || die "Brave patch walker compatibility fix is incomplete"
+  [[ $(grep -nF '0000-fix-brave-patch-walker.patch' "$root/package.nix" | head -n1 | cut -d: -f1) \
+      -lt $(grep -nF 'python3 brave/script/apply-patches.py' "$root/package.nix" | head -n1 | cut -d: -f1) ]] \
+    || die "Brave patch walker fix is not applied before the patch driver"
   [[ $(jq -r .coreNodeModulesHash "$metadata") == sha256-* ]] \
     || die "core node_modules output is not hash-pinned"
   ! grep -R -Fq -- '--impure' "$root/package.nix" "$root/nix" \

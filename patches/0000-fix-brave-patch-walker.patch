@@ -1,0 +1,10 @@
+diff --git a/brave/script/apply-patches.py b/brave/script/apply-patches.py
+index 9656e40416..324177d602 100755
+--- a/brave/script/apply-patches.py
++++ b/brave/script/apply-patches.py
+@@ -27 +27 @@ def apply_patches_for_dir(directory):
+-    for root, files in os.walk(directory):
++    for root, _, files in os.walk(directory):
+@@ -40 +40 @@ def revert_changes_for_dir(directory):
+-    for root, files in reversed(list(os.walk(directory))):
++    for root, _, files in reversed(list(os.walk(directory))):

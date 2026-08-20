@@ -64,6 +64,10 @@ let
       cp -a ${sources.wdpNodeModules}/node_modules/. \
         brave/vendor/web-discovery-project/node_modules/
 
+      # Brave 1.93.137 accidentally unpacks os.walk() as a two-tuple in its
+      # legacy patch driver.  Fix the pinned helper before asking it to apply
+      # Brave's own Chromium patch series.
+      patch -p1 < ${./patches/0000-fix-brave-patch-walker.patch}
       python3 brave/script/apply-patches.py
       patch -p1 < ${./patches/0001-use-br-user-data-directory.patch}
       python3 brave/build/util/version.py update chrome/VERSION \

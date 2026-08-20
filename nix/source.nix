@@ -8,7 +8,7 @@ let
     pkgs.fetchzip {
       inherit (value) url hash;
       stripRoot = true;
-  };
+    };
   deps = pkgs.lib.mapAttrs (_path: fetch) metadata.deps;
   core = fetch metadata.core;
 
