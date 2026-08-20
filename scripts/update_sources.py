@@ -8,6 +8,7 @@ import ast
 import concurrent.futures
 import json
 import pathlib
+import re
 import subprocess
 import sys
 import warnings
@@ -63,9 +64,17 @@ def main() -> int:
         raise RuntimeError("requested version does not match brave-core package.json")
     chromium_version = package["config"]["projects"]["chrome"]["tag"]
     urls = deps_from_file(args.core / "DEPS")
+    leo_dependency = package["dependencies"]["@brave/leo"]
+    leo_match = re.fullmatch(r"github:brave/leo#([0-9a-f]{40})", leo_dependency)
+    if not leo_match:
+        raise RuntimeError(f"unsupported @brave/leo dependency: {leo_dependency!r}")
+    leo_url = f"https://github.com/brave/leo/archive/{leo_match.group(1)}.tar.gz"
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
-        hashes = dict(zip(urls, pool.map(prefetch, urls.values()), strict=True))
+        source_urls = {**urls, "@brave/leo": leo_url}
+        hashes = dict(
+            zip(source_urls, pool.map(prefetch, source_urls.values()), strict=True)
+        )
 
     old = json.loads(args.output.read_text()) if args.output.exists() else {}
     old_core = old.get("core", {}).get("url")
@@ -73,6 +82,8 @@ def main() -> int:
     old_wdp = old.get("deps", {}).get("vendor/web-discovery-project", {}).get("url")
     new_wdp = urls.get("vendor/web-discovery-project")
     wdp_hash = old.get("wdpNodeModulesHash") if old_wdp == new_wdp else None
+    old_leo = old.get("leo", {}).get("url")
+    leo_npm_hash = old.get("leoNpmDepsHash") if old_leo == leo_url else None
 
     metadata = {
         "version": args.version,
@@ -85,6 +96,12 @@ def main() -> int:
         "coreNodeModulesHash": old.get("coreNodeModulesHash")
         if old_core == new_core
         else "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+        "leo": {
+            "url": leo_url,
+            "hash": hashes["@brave/leo"],
+        },
+        "leoNpmDepsHash": leo_npm_hash
+        or "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
         "wdpNodeModulesHash": wdp_hash or "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
         "deps": {
             destination: {"url": url, "hash": hashes[destination]}

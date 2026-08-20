@@ -7,6 +7,11 @@
     "hash": "sha256-FKkSt7GqqWmJW6LPUU6Tp9Dr5gnkbtq/IVJZFejC014="
   },
   "coreNodeModulesHash": "sha256-2f8+Oz3+EIeUkdqguu3U6uKwy4+ewkqikDVS9yEtdJM=",
+  "leo": {
+    "url": "https://github.com/brave/leo/archive/171b814b205217d651a76080a0c50a80d1b0c257.tar.gz",
+    "hash": "sha256-z6Ltx77+yiBwYGwnSSda1cZuGqJbQrvlImbmxdHxBRg="
+  },
+  "leoNpmDepsHash": "sha256-rZ6T4z7j0eMovTYA0fZOkp4ppTEDNPvc+DRnSc90N2U=",
   "wdpNodeModulesHash": "sha256-zeq/oEdOt3UmfG7tVVIw7dJKk7g45Nfp3v+AqBtrPzM=",
   "deps": {
     "components/brave_wallet/browser/zcash/rust/librustzcash/src": {

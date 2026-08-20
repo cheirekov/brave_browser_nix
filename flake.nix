@@ -60,6 +60,7 @@
           '';
 
           npm-dependencies = package.unwrapped.passthru.sources.coreNodeModules;
+          leo-artifacts = package.unwrapped.passthru.sources.leoArtifacts;
         }
       );
 

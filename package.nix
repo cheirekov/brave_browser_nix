@@ -66,6 +66,12 @@ let
           npm rebuild --offline --no-audit --no-fund
         patchShebangs node_modules
       )
+      # @brave/leo is a Git dependency whose generated artifacts are normally
+      # produced by its prepare script. Build those with their own pinned npm
+      # dependency graph and install the prepared package here.
+      rm -rf brave/node_modules/@brave/leo
+      cp -a ${sources.leoArtifacts} brave/node_modules/@brave/leo
+      chmod -R u+w brave/node_modules/@brave/leo
       mkdir -p brave/vendor/web-discovery-project/node_modules
       cp -a ${sources.wdpNodeModules}/node_modules/. \
         brave/vendor/web-discovery-project/node_modules/
@@ -102,6 +108,15 @@ let
     ''
     + base.postPatch
     + ''
+      # Brave builds additional Rust/WASM tools which need Cargo alongside the
+      # rustc link already installed by nixpkgs' Chromium postPatch.
+      ln -s ${pkgs.buildPackages.cargo}/bin/cargo \
+        third_party/rust-toolchain/bin/cargo
+      # DevTools' pinned npm graph provides its exact esbuild version; expose it
+      # at the CIPD path referenced by the generated Ninja graph.
+      mkdir -p third_party/devtools-frontend/src/third_party/esbuild
+      ln -s ../../node_modules/esbuild/bin/esbuild \
+        third_party/devtools-frontend/src/third_party/esbuild/esbuild
       python3 brave/build/util/version.py gen chrome/VERSION
     '';
 
@@ -112,6 +127,9 @@ let
       # Official Brave builds require private service keys which are not part
       # of the public source tree. Build the supported community/source variant.
       is_official_build = false;
+      # Chromium defaults community Linux builds to its downloaded CIPD mold.
+      # Nixpkgs already supplies lld through the system LLVM toolchain.
+      use_mold = false;
     };
 
     installPhase = ''

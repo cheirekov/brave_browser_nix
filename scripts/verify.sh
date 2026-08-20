@@ -19,6 +19,8 @@ verify_source() {
     || die "package does not set enable_tor=false"
   grep -Eq 'is_official_build[[:space:]]*=[[:space:]]*false' "$root/package.nix" \
     || die "package does not select the community/source build mode"
+  grep -Eq 'use_mold[[:space:]]*=[[:space:]]*false' "$root/package.nix" \
+    || die "package does not disable Chromium's unavailable CIPD mold linker"
   for defaults in brave_defaults blink_platform_defaults branding_defaults desktop_defaults; do
     grep -Fq "//brave/build/args/$defaults.gni" "$root/package.nix" \
       || die "package does not import Brave's $defaults GN defaults"
@@ -35,6 +37,21 @@ verify_source() {
   grep -Fq "import branding from './brave/build/commands/lib/branding.js'" \
     "$root/package.nix" \
     || die "package does not run Brave's branding preparation step"
+  grep -Fq 'third_party/rust-toolchain/bin/cargo' "$root/package.nix" \
+    || die "package does not provide Cargo for Brave's Rust/WASM tools"
+  grep -Fq 'third_party/devtools-frontend/src/third_party/esbuild/esbuild' \
+    "$root/package.nix" \
+    || die "package does not expose DevTools' pinned esbuild at its CIPD path"
+  [[ $(jq -r .leo.hash "$metadata") == sha256-* ]] \
+    || die "@brave/leo source is not hash-pinned"
+  [[ $(jq -r .leoNpmDepsHash "$metadata") == sha256-* ]] \
+    || die "@brave/leo npm dependencies are not hash-pinned"
+  grep -Fq 'package["dependencies"]["@brave/leo"]' "$root/scripts/update_sources.py" \
+    || die "source updater does not track Brave's @brave/leo revision"
+  grep -Fq ').leoArtifacts' "$root/scripts/update.sh" \
+    || die "update script does not refresh @brave/leo npm dependencies"
+  grep -Fq 'sources.leoArtifacts' "$root/package.nix" \
+    || die "package does not install generated @brave/leo artifacts"
   [[ $(grep -Fc 'for root, _, files in' "$root/patches/0000-fix-brave-patch-walker.patch") == 2 ]] \
     || die "Brave patch walker compatibility fix is incomplete"
   [[ $(grep -nF '0000-fix-brave-patch-walker.patch' "$root/package.nix" | head -n1 | cut -d: -f1) \
@@ -60,6 +77,8 @@ verify_result() {
     || die "recorded GN arguments do not contain enable_tor=false"
   grep -Eq '^is_official_build[[:space:]]*=[[:space:]]*false$' "$result/share/br/build-args.gn" \
     || die "recorded GN arguments do not select the community/source build mode"
+  grep -Eq '^use_mold[[:space:]]*=[[:space:]]*false$' "$result/share/br/build-args.gn" \
+    || die "recorded GN arguments do not disable the unavailable CIPD mold linker"
   grep -Fq 'user-data-dir="$profile_root/br"' "$result/bin/br" \
     || die "installed wrapper does not isolate the profile"
   grep -Eq '^Name=BR$' "$result/share/applications/br.desktop" \

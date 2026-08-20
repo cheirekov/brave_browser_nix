@@ -75,6 +75,18 @@ if ! (cd "$repo_root" && nix build --no-link --impure --expr \
     'let f = builtins.getFlake (toString ./.); pkgs = import f.inputs.nixpkgs { system = "x86_64-linux"; }; in (import ./nix/source.nix { inherit pkgs; }).coreNodeModules')
 fi
 
+leo_log="$temporary/leo.log"
+if ! (cd "$repo_root" && nix build --no-link --impure --expr \
+  'let f = builtins.getFlake (toString ./.); pkgs = import f.inputs.nixpkgs { system = "x86_64-linux"; }; in (import ./nix/source.nix { inherit pkgs; }).leoArtifacts') \
+  >"$leo_log" 2>&1; then
+  got=$(sed -n 's/^[[:space:]]*got:[[:space:]]*\(sha256-[^[:space:]]*\)$/\1/p' "$leo_log" | tail -1)
+  [[ -n $got ]] || { cat "$leo_log" >&2; exit 1; }
+  jq --arg hash "$got" '.leoNpmDepsHash = $hash' "$metadata" > "$temporary/sources.updated.json"
+  cp "$temporary/sources.updated.json" "$metadata"
+  (cd "$repo_root" && nix build --no-link --impure --expr \
+    'let f = builtins.getFlake (toString ./.); pkgs = import f.inputs.nixpkgs { system = "x86_64-linux"; }; in (import ./nix/source.nix { inherit pkgs; }).leoArtifacts')
+fi
+
 wdp_log="$temporary/wdp.log"
 if ! (cd "$repo_root" && nix build --no-link --impure --expr \
   'let f = builtins.getFlake (toString ./.); pkgs = import f.inputs.nixpkgs { system = "x86_64-linux"; }; in (import ./nix/source.nix { inherit pkgs; }).wdpNodeModules') \

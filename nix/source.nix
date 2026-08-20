@@ -11,6 +11,25 @@ let
     };
   deps = pkgs.lib.mapAttrs (_path: fetch) metadata.deps;
   core = fetch metadata.core;
+  leo = fetch metadata.leo;
+
+  leoArtifacts = pkgs.buildNpmPackage {
+    pname = "br-leo-artifacts";
+    inherit (metadata) version;
+    src = leo;
+    nodejs = pkgs.nodejs_24;
+    npmDepsHash = metadata.leoNpmDepsHash;
+    makeCacheWritable = true;
+    npmBuildScript = "build";
+    dontFixup = true;
+    installPhase = ''
+      runHook preInstall
+      rm -rf node_modules
+      mkdir -p "$out"
+      cp -a . "$out/"
+      runHook postInstall
+    '';
+  };
 
   coreNodeModules = pkgs.stdenvNoCC.mkDerivation {
     pname = "br-core-node-modules";
@@ -78,6 +97,8 @@ metadata
     core
     coreNodeModules
     deps
+    leo
+    leoArtifacts
     wdpNodeModules
     ;
 }
