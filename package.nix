@@ -89,6 +89,13 @@ let
       python3 brave/script/apply-patches.py
       patch -p1 < ${./patches/0001-use-br-user-data-directory.patch}
       patch -p1 < ${./patches/0002-allow-linux-installer-without-sysroot.patch}
+      substituteInPlace brave/components/common/rust_to_wasm.gni \
+        --replace-fail \
+          '    response_file_contents = [ "PATH=./" + host_path_sep +' \
+          '    response_file_contents = [
+      "CARGO_HOME=" +
+          rebase_path("//brave/third_party/wasm/cargo-home"),
+      "PATH=./" + host_path_sep +'
 
       # The upstream build command copies Brave's branding files into their
       # Chromium destinations immediately before GN generation.
@@ -119,16 +126,16 @@ let
       mv "$TMPDIR/brave-tools-crates-vendor" brave/tools/crates/vendor
       mv "$TMPDIR/brave-wasm-vendor" brave/third_party/wasm/vendor
 
-      # wasm-pack resolves the workspace before compiling an individual member.
-      # Put the source replacement at the workspace root so Cargo sees Brave's
-      # checked-in dependency tree even when invoked from Ninja's output dir.
-      mkdir -p brave/third_party/wasm/.cargo
-      cat > brave/third_party/wasm/.cargo/config.toml <<'EOF'
+      # wasm-pack runs cargo metadata before forwarding its explicit Cargo
+      # arguments. Give that subprocess a dedicated Cargo home whose source
+      # replacement is independent of Ninja's working directory.
+      mkdir -p brave/third_party/wasm/cargo-home
+      cat > brave/third_party/wasm/cargo-home/config.toml <<EOF
       [source.crates-io]
       replace-with = "vendored-sources"
 
       [source.vendored-sources]
-      directory = "vendor"
+      directory = "$(pwd)/brave/third_party/wasm/vendor"
 
       [net]
       offline = true
