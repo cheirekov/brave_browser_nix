@@ -93,11 +93,13 @@ Core npm dependencies are realized as the separate fixed-output
 `coreNodeModules` derivation. This is necessary because Brave includes git
 dependencies whose nested legacy lockfiles cannot be represented correctly by
 the current nixpkgs npm cache fetcher. Network access is confined to that
-hash-pinned dependency derivation; the Chromium/Brave compilation consumes its
-immutable node tree and npm cache offline. Store-specific shebang patching and
-native module rebuilds happen only in the normal sandboxed browser derivation,
-not in the fixed-output dependency result. The npm bootstrap can therefore be
-validated without unpacking or compiling Chromium.
+hash-pinned dependency derivation; its npm download cache is deliberately not
+copied into the result because npm records request timestamps and response
+dates there. The Chromium/Brave compilation consumes the immutable node tree
+offline. Store-specific shebang patching and native module rebuilds happen only
+in the normal sandboxed browser derivation, not in the fixed-output dependency
+result. The npm bootstrap can therefore be validated without unpacking or
+compiling Chromium.
 
 The Web Discovery dependency is handled by its own fixed-output derivation.
 Both its npm tree and the patched generated `modules` tree are copied into the

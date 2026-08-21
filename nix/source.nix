@@ -59,8 +59,6 @@ let
 
       mkdir -p "$out"
       cp -a node_modules "$out/"
-      rm -rf "$npm_config_cache/_logs"
-      cp -a "$npm_config_cache" "$out/npm-cache"
       runHook postInstall
     '';
   };

@@ -58,8 +58,7 @@ let
       mkdir -p "$HOME"
       cp -a ${sources.coreNodeModules}/node_modules brave/
       chmod -R u+w brave/node_modules
-      cp -a ${sources.coreNodeModules}/npm-cache "$TMPDIR/br-npm-cache"
-      chmod -R u+w "$TMPDIR/br-npm-cache"
+      mkdir -p "$TMPDIR/br-npm-cache"
       (
         cd brave
         patchShebangs node_modules
