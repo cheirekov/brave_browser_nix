@@ -112,10 +112,27 @@ let
       # invalidates its .cargo-checksum.json, while touching an executable WASM
       # fixture can corrupt it.
       mv brave/tools/crates/vendor "$TMPDIR/brave-tools-crates-vendor"
+      mv brave/third_party/wasm/vendor "$TMPDIR/brave-wasm-vendor"
     ''
     + base.postPatch
     + ''
       mv "$TMPDIR/brave-tools-crates-vendor" brave/tools/crates/vendor
+      mv "$TMPDIR/brave-wasm-vendor" brave/third_party/wasm/vendor
+
+      # wasm-pack resolves the workspace before compiling an individual member.
+      # Put the source replacement at the workspace root so Cargo sees Brave's
+      # checked-in dependency tree even when invoked from Ninja's output dir.
+      mkdir -p brave/third_party/wasm/.cargo
+      cat > brave/third_party/wasm/.cargo/config.toml <<'EOF'
+      [source.crates-io]
+      replace-with = "vendored-sources"
+
+      [source.vendored-sources]
+      directory = "vendor"
+
+      [net]
+      offline = true
+      EOF
 
       # Brave builds additional Rust/WASM tools which need Cargo alongside the
       # rustc link already installed by nixpkgs' Chromium postPatch.
@@ -135,6 +152,7 @@ let
     preBuild = (base.preBuild or "") + ''
       export PYTHONPATH="$(pwd)/brave/script:$(pwd)/tools/grit/grit/extern:$(pwd)/brave/vendor/requests:$(pwd)/brave/third_party/cryptography:$(pwd)/brave/third_party/macholib:$(pwd)/build:$(pwd)/third_party/depot_tools''${PYTHONPATH:+:$PYTHONPATH}"
       export PYTHONUNBUFFERED=1
+      export CARGO_NET_OFFLINE=true
     '';
 
     gnFlags = {
