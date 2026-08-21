@@ -105,9 +105,18 @@ let
         -e 's/^BUILD=.*/BUILD=${builtins.elemAt braveVersionParts 1}/' \
         -e 's/^PATCH=.*/PATCH=${builtins.elemAt braveVersionParts 2}/' \
         chrome/VERSION
+
+      # nixpkgs' Chromium postPatch normalizes every executable file and then
+      # runs patchShebangs over the complete tree. Keep Cargo's immutable
+      # vendored sources out of that pass: changing even an unused test script
+      # invalidates its .cargo-checksum.json, while touching an executable WASM
+      # fixture can corrupt it.
+      mv brave/tools/crates/vendor "$TMPDIR/brave-tools-crates-vendor"
     ''
     + base.postPatch
     + ''
+      mv "$TMPDIR/brave-tools-crates-vendor" brave/tools/crates/vendor
+
       # Brave builds additional Rust/WASM tools which need Cargo alongside the
       # rustc link already installed by nixpkgs' Chromium postPatch.
       ln -s ${pkgs.buildPackages.cargo}/bin/cargo \
