@@ -169,6 +169,11 @@ let
       # Official Brave builds require private service keys which are not part
       # of the public source tree. Build the supported community/source variant.
       is_official_build = false;
+      # Chromium otherwise derives both of these as true from a non-official
+      # build. Keep the community build in release/static mode: component debug
+      # libraries do not carry the final Rust allocator dependency closure.
+      is_debug = false;
+      is_component_build = false;
       # Chromium defaults community Linux builds to its downloaded CIPD mold.
       # Nixpkgs already supplies lld through the system LLVM toolchain.
       use_mold = false;
