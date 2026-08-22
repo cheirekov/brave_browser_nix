@@ -29,7 +29,10 @@ let
     name = "br-browser";
     version = sources.version;
     packageName = "br";
-    buildTargets = [ "brave" ];
+    buildTargets = [
+      "chrome_sandbox"
+      "brave"
+    ];
     outputs = [
       "out"
       "sandbox"
@@ -192,11 +195,12 @@ let
       cp -v "$buildPath/icudtl.dat" "$buildPath/chrome_crashpad_handler" "$libExecPath/"
       cp -vLR "$buildPath/locales" "$buildPath/resources" "$libExecPath/"
       cp -v "$buildPath/brave" "$libExecPath/br"
-      if find "$buildPath/swiftshader" -maxdepth 1 -name '*.so' -print -quit | grep -q .; then
+      if [ -d "$buildPath/swiftshader" ] \
+        && find "$buildPath/swiftshader" -maxdepth 1 -name '*.so' -print -quit | grep -q .; then
         mkdir -p "$libExecPath/swiftshader"
         cp -v "$buildPath/swiftshader/"*.so "$libExecPath/swiftshader/"
       fi
-      cp -v "$buildPath/brave_sandbox" "$sandbox/bin/br-sandbox"
+      cp -v "$buildPath/chrome_sandbox" "$sandbox/bin/br-sandbox"
       mkdir -p "$out/share/br"
       cp -v "$buildPath/args.gn" "$out/share/br/build-args.gn"
       runHook postInstall
