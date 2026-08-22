@@ -1,0 +1,29 @@
+name: full Brave build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: full-brave-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    uses: cheirekov/nix-aws-build-infra/.github/workflows/nix-build.yml@main
+    permissions:
+      contents: read
+      id-token: write
+    with:
+      aws_role_arn: ${{ vars.NIX_AWS_ROLE_ARN }}
+      github_app_id: ${{ vars.NIX_AWS_GITHUB_APP_ID }}
+      flake_attribute: br
+      verification_script: ./scripts/verify.sh ./result
+      timeout_minutes: 600
+      runner_profile: large-x86_64
+    secrets:
+      github_app_private_key: ${{ secrets.NIX_AWS_GITHUB_APP_PRIVATE_KEY }}

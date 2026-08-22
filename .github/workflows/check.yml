@@ -5,12 +5,6 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      full_build:
-        description: Run the full browser build on a self-hosted runner
-        required: false
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -26,13 +20,3 @@ jobs:
       - run: nix flake check --print-build-logs
       - run: nix eval --raw .#br.pname | grep -Fx br
       - run: ./scripts/verify.sh --source .
-
-  full-build:
-    if: github.event_name == 'workflow_dispatch' && inputs.full_build
-    runs-on: [self-hosted, linux, x64]
-    timeout-minutes: 2880
-    steps:
-      - uses: actions/checkout@v5
-      - uses: cachix/install-nix-action@v31
-      - run: nix build .#br --print-build-logs
-      - run: nix shell nixpkgs#desktop-file-utils -c ./scripts/verify.sh ./result
