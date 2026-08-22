@@ -19,11 +19,7 @@ jobs:
       contents: read
       id-token: write
     with:
-      aws_role_arn: ${{ vars.NIX_AWS_ROLE_ARN }}
-      github_app_id: ${{ vars.NIX_AWS_GITHUB_APP_ID }}
       flake_attribute: br
       verification_script: ./scripts/verify.sh ./result
       timeout_minutes: 600
       runner_profile: large-x86_64
-    secrets:
-      github_app_private_key: ${{ secrets.NIX_AWS_GITHUB_APP_PRIVATE_KEY }}
