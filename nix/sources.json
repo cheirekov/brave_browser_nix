@@ -1,6 +1,7 @@
 {
   "version": "1.93.137",
   "tag": "v1.93.137",
+  "channel": "stable",
   "chromiumVersion": "151.0.7922.169",
   "core": {
     "url": "https://github.com/brave/brave-core/archive/refs/tags/v1.93.137.tar.gz",

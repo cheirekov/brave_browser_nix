@@ -80,9 +80,9 @@ Nix build
      br
 ```
 
-The pinned release is Brave `1.93.137`, based on Chromium
-`151.0.7922.169`. `brave-core` and every unconditional Linux dependency in its
-`DEPS` file are fixed-output sources with hashes in
+The exact Brave Stable and Chromium versions are recorded in
+[`nix/sources.json`](nix/sources.json). `brave-core` and every unconditional
+Linux dependency in its `DEPS` file are fixed-output sources with hashes in
 [`nix/sources.json`](nix/sources.json). Chromium's much larger recursive source
 graph is taken from the locked nixpkgs Chromium expression at exactly the same
 Chromium version. nixpkgs assembles that graph from individually hashed Gitiles
@@ -139,15 +139,42 @@ Apply an update locally:
 ./scripts/update.sh
 ```
 
-The updater reads Brave's official Stable channel endpoint (not GitHub's
-ambiguous `latest` release), fetches the tagged core, regenerates all Brave
-DEPS hashes and npm metadata, updates the nixpkgs lock, verifies an exact
+The updater reads Brave's official Linux x64 Stable channel endpoint (not
+GitHub's ambiguous `latest` release). It rejects beta, nightly, arbitrary
+`--version` values, and downgrades. It fetches the tagged core, regenerates all
+Brave DEPS hashes and npm metadata, updates the nixpkgs lock, verifies an exact
 Chromium version match, and runs the lightweight checks. If nixpkgs has not yet
 packaged Brave's Chromium revision, the update fails and restores both metadata
-files; retry after nixpkgs catches up.
+files; retry after nixpkgs catches up. Other Brave channels are never followed
+by scheduled automation.
 
 The scheduled GitHub workflow opens or updates an idempotent
-`automation/brave-VERSION` pull request. It never merges automatically.
+`automation/brave-VERSION` pull request. Before updating an existing branch it
+requires one unmerged automation commit, the GitHub Actions bot identity, the
+expected commit subject, and changes confined to `flake.lock` and
+`nix/sources.json`. Updates use an exact remote SHA lease; a foreign edit or
+race fails closed. A closed PR is not silently replaced with a duplicate. The
+workflow never merges and never starts the full browser build.
+
+The updater uses the ephemeral repository `GITHUB_TOKEN` with only
+`contents: write` and `pull-requests: write`. Repository Settings → Actions →
+General must enable [“Allow GitHub Actions to create and approve pull
+requests”][actions-settings] for PR creation. The repository-wide switch also
+makes approval available to any trusted workflow that explicitly requests
+`pull-requests: write`; this repository's updater never requests or performs
+approval. Keeping the default workflow permission at read and granting writes
+only in the updater limits the effective capability. A dedicated GitHub App is
+warranted instead if separate PR-triggered workflows must run automatically
+from bot-created events, but it adds a private key and token-minting lifecycle.
+
+GitHub [suppresses most new workflow runs][token-events] caused by
+`GITHUB_TOKEN`; supported pull-request events may instead wait for a maintainer
+to approve the workflow run. The updater therefore runs `nix flake check`,
+source verification, and the automation tests itself before publishing the PR.
+The PR records that result; it does not claim a full browser build.
+
+[actions-settings]: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/enabling-features-for-your-repository/managing-github-actions-settings-for-a-repository#configuring-the-default-github_token-permissions
+[token-events]: https://docs.github.com/en/actions/how-tos/writing-workflows/choosing-when-your-workflow-runs/triggering-a-workflow#triggering-a-workflow-from-a-workflow
 
 ## Verification
 
@@ -170,7 +197,21 @@ resource links, the isolated-profile wrapper, and the installed `args.gn` for
 `enable_tor=false`. The recorded GN configuration is stronger evidence than
 searching binary strings; upstream compile guards then exclude the Tor UI and
 implementation. A full build belongs on a large self-hosted runner and is not
-enabled on ordinary GitHub-hosted runners.
+enabled on ordinary GitHub-hosted runners. It is available only through the
+`full Brave build` workflow's manual dispatch.
+
+For the recommended release gate:
+
+1. Review the Stable update PR and copy its head ref, exact 40-character head
+   commit SHA, and Brave version from `nix/sources.json`.
+2. Open Actions → `full Brave build`, select the same ref in “Use workflow
+   from”, and enter that ref, Brave version, and commit SHA in the three
+   confirmation inputs.
+3. Confirm that the run title and `Confirmed full-build selection` summary show
+   the intended ref, commit, Stable channel, and version. A mismatch stops
+   before provisioning the large builder.
+4. Merge only after that exact commit's full build and result verification
+   succeed. If the PR head changes, run the manual build again for the new SHA.
 
 ## Licensing
 

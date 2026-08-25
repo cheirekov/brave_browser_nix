@@ -1,7 +1,7 @@
 # Downstream patches
 
-`0000-fix-brave-patch-walker.patch` repairs the pinned Brave 1.93.137 legacy
-patch driver. Its two `os.walk()` loops unpack only two values, although Python
+`0000-fix-brave-patch-walker.patch` repairs the pinned Brave legacy patch
+driver. Its two `os.walk()` loops unpack only two values, although Python
 returns `(root, directories, files)`. The compatibility patch also replaces
 the obsolete `python-patch` backend, which requires exact hunk line numbers,
 with GNU `patch`. Brave's current patch set contains valid unified diffs with

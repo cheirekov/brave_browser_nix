@@ -88,6 +88,7 @@ def main() -> int:
     metadata = {
         "version": args.version,
         "tag": f"v{args.version}",
+        "channel": "stable",
         "chromiumVersion": chromium_version,
         "core": {
             "url": new_core,

@@ -23,18 +23,53 @@ for command in curl git jq nix python3; do
 done
 
 current=$(jq -r .version "$metadata")
-latest=${requested_version:-$(curl -fsSL https://versions.brave.com/latest/release-linux-x64.version)}
-[[ $latest =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { printf 'invalid upstream version: %s\n' "$latest" >&2; exit 1; }
+channel=$(jq -r '.channel // empty' "$metadata")
+[[ $channel == stable ]] || {
+  printf 'refusing update: source metadata channel is %s, expected stable\n' "${channel:-unset}" >&2
+  exit 1
+}
+
+stable=$(curl -fsSL https://versions.brave.com/latest/release-linux-x64.version)
+[[ $stable =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+  printf 'invalid Brave Stable endpoint response: %s\n' "$stable" >&2
+  exit 1
+}
+
+if [[ -n $requested_version && $requested_version != "$stable" ]]; then
+  printf 'refusing requested version %s: official Linux Stable is %s\n' \
+    "$requested_version" "$stable" >&2
+  exit 1
+fi
+latest=${requested_version:-$stable}
+
+version_is_newer() {
+  local candidate=$1 installed=$2 candidate_major candidate_minor candidate_patch
+  local installed_major installed_minor installed_patch
+  IFS=. read -r candidate_major candidate_minor candidate_patch <<<"$candidate"
+  IFS=. read -r installed_major installed_minor installed_patch <<<"$installed"
+  ((10#$candidate_major > 10#$installed_major)) && return 0
+  ((10#$candidate_major < 10#$installed_major)) && return 1
+  ((10#$candidate_minor > 10#$installed_minor)) && return 0
+  ((10#$candidate_minor < 10#$installed_minor)) && return 1
+  ((10#$candidate_patch > 10#$installed_patch))
+}
 
 if [[ $latest == "$current" ]]; then
-  printf 'update_available=false\n'
-  [[ -n ${GITHUB_OUTPUT:-} ]] && printf 'update_available=false\n' >> "$GITHUB_OUTPUT"
+  printf 'update_available=false\nchannel=stable\nstable_version=%s\n' "$stable"
+  [[ -n ${GITHUB_OUTPUT:-} ]] &&
+    printf 'update_available=false\nchannel=stable\nstable_version=%s\n' "$stable" >> "$GITHUB_OUTPUT"
   exit 0
 fi
 
-printf 'update_available=true\nold_version=%s\nnew_version=%s\n' "$current" "$latest"
+version_is_newer "$latest" "$current" || {
+  printf 'refusing Brave Stable downgrade: current=%s upstream=%s\n' "$current" "$latest" >&2
+  exit 1
+}
+
+printf 'update_available=true\nchannel=stable\nold_version=%s\nnew_version=%s\n' "$current" "$latest"
 if [[ -n ${GITHUB_OUTPUT:-} ]]; then
-  printf 'update_available=true\nold_version=%s\nnew_version=%s\n' "$current" "$latest" >> "$GITHUB_OUTPUT"
+  printf 'update_available=true\nchannel=stable\nold_version=%s\nnew_version=%s\n' \
+    "$current" "$latest" >> "$GITHUB_OUTPUT"
 fi
 $check_only && exit 0
 
@@ -45,7 +80,15 @@ restore() {
   cp "$temporary/sources.json" "$metadata"
   cp "$temporary/flake.lock" "$repo_root/flake.lock"
 }
-trap 'status=$?; if ((status)); then restore; fi; exit $status' EXIT
+restore_on_exit() {
+  exit_status=$?
+  if ((exit_status)); then
+    restore
+  fi
+  trap - EXIT
+  exit "$exit_status"
+}
+trap restore_on_exit EXIT
 
 core_json=$(nix store prefetch-file --json --unpack \
   "https://github.com/brave/brave-core/archive/refs/tags/v${latest}.tar.gz")

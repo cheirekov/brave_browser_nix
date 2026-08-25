@@ -4,3 +4,5 @@
 /.envrc
 *.log
 *.new
+__pycache__/
+*.py[cod]
