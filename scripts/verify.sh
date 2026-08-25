@@ -11,7 +11,12 @@ verify_source() {
   local metadata="$root/nix/sources.json"
   [[ -f $metadata ]] || die "missing nix/sources.json"
   [[ $(jq -r .version "$metadata") =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "invalid Brave version"
+  [[ $(jq -r '.channel // empty' "$metadata") == stable ]] \
+    || die "source metadata is not pinned to the Stable channel"
   [[ $(jq -r .tag "$metadata") == "v$(jq -r .version "$metadata")" ]] || die "tag/version mismatch"
+  [[ $(jq -r .core.url "$metadata") == \
+      "https://github.com/brave/brave-core/archive/refs/tags/$(jq -r .tag "$metadata").tar.gz" ]] \
+    || die "brave-core URL does not match the pinned Stable tag"
   [[ $(jq -r .core.hash "$metadata") == sha256-* ]] || die "core source is not hashed"
   jq -e '.deps | length > 0 and all(.[]; .hash | startswith("sha256-"))' "$metadata" >/dev/null \
     || die "a Brave DEPS source is missing its hash"

@@ -1,7 +1,22 @@
 name: full Brave build
+run-name: >-
+  full Brave build · ${{ inputs.build_ref }} · Brave ${{ inputs.brave_version }} · ${{ inputs.expected_commit }}
 
 on:
   workflow_dispatch:
+    inputs:
+      build_ref:
+        description: Exact branch/tag selected in the “Use workflow from” control
+        required: true
+        type: string
+      brave_version:
+        description: Expected Stable version in nix/sources.json (for example 1.93.138)
+        required: true
+        type: string
+      expected_commit:
+        description: Exact 40-character commit SHA reviewed for this build
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -12,9 +27,67 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  validate-selection:
+    name: validate selected ref, commit, and Stable version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      ref: ${{ steps.selection.outputs.ref }}
+      sha: ${{ steps.selection.outputs.sha }}
+      version: ${{ steps.selection.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: selection
+        name: Confirm checkout identity
+        env:
+          EXPECTED_REF: ${{ inputs.build_ref }}
+          EXPECTED_VERSION: ${{ inputs.brave_version }}
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+        run: |
+          set -euo pipefail
+          actual_ref=${GITHUB_REF_NAME}
+          actual_sha=$(git rev-parse HEAD)
+          actual_version=$(jq -r .version nix/sources.json)
+          actual_channel=$(jq -r '.channel // empty' nix/sources.json)
+          actual_tag=$(jq -r .tag nix/sources.json)
+
+          [[ $EXPECTED_REF == "$actual_ref" ]] || {
+            printf 'Selected workflow ref is %s, but build_ref confirmation is %s\n' \
+              "$actual_ref" "$EXPECTED_REF" >&2
+            exit 1
+          }
+          [[ $EXPECTED_COMMIT =~ ^[0-9a-f]{40}$ && $EXPECTED_COMMIT == "$actual_sha" ]] || {
+            printf 'Selected commit is %s, but expected_commit is %s\n' \
+              "$actual_sha" "$EXPECTED_COMMIT" >&2
+            exit 1
+          }
+          [[ $EXPECTED_VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && \
+              $EXPECTED_VERSION == "$actual_version" ]] || {
+            printf 'Selected Brave version is %s, but brave_version is %s\n' \
+              "$actual_version" "$EXPECTED_VERSION" >&2
+            exit 1
+          }
+          [[ $actual_channel == stable && $actual_tag == "v${actual_version}" ]] || {
+            printf 'Selected metadata is not a consistent Brave Stable pin\n' >&2
+            exit 1
+          }
+
+          printf 'ref=%s\nsha=%s\nversion=%s\n' \
+            "$actual_ref" "$actual_sha" "$actual_version" >> "$GITHUB_OUTPUT"
+          printf '%s\n' \
+            '## Confirmed full-build selection' \
+            '' \
+            "- Ref: \`${actual_ref}\`" \
+            "- Commit: \`${actual_sha}\`" \
+            "- Brave channel: \`stable\`" \
+            "- Brave version: \`${actual_version}\`" \
+            >> "$GITHUB_STEP_SUMMARY"
+
   build:
-    if: github.ref == 'refs/heads/main'
-    uses: cheirekov/nix-aws-build-infra/.github/workflows/nix-build.yml@main
+    name: build Brave ${{ needs.validate-selection.outputs.version }} at ${{ needs.validate-selection.outputs.ref }}
+    needs: validate-selection
+    uses: cheirekov/nix-aws-build-infra/.github/workflows/nix-build.yml@79a9b0f6a61ed3373bbf71e12ffc09718b55cba6
     permissions:
       contents: read
       id-token: write

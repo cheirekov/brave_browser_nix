@@ -20,3 +20,4 @@ jobs:
       - run: nix flake check --print-build-logs
       - run: nix eval --raw .#br.pname | grep -Fx br
       - run: ./scripts/verify.sh --source .
+      - run: python3 -m unittest discover -s tests -v
