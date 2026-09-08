@@ -57,6 +57,9 @@ verify_source() {
     || die "source updater does not preserve the pinned DevTools esbuild binary"
   grep -Fq 'brave/script:$(pwd)/tools/grit/grit/extern' "$root/package.nix" \
     || die "package does not provide Brave's Python module search paths"
+  if [[ $(jq -r '.corePackageManager // "npm"' "$metadata") == npm ]]; then
+    [[ $(jq -r .coreNodeModulesHash "$metadata") == sha256-* ]] \
+      || die "core npm dependencies are not hash-pinned"
   [[ $(jq -r .leo.hash "$metadata") == sha256-* ]] \
     || die "@brave/leo source is not hash-pinned"
   [[ $(jq -r .leoNpmDepsHash "$metadata") == sha256-* ]] \
@@ -67,6 +70,20 @@ verify_source() {
     || die "update script does not refresh @brave/leo npm dependencies"
   grep -Fq 'sources.leoArtifacts' "$root/package.nix" \
     || die "package does not install generated @brave/leo artifacts"
+  else
+    [[ $(jq -r '.corePackageManager // empty' "$metadata") == pnpm ]] \
+      || die "unsupported core package manager"
+    [[ $(jq -r .corePnpmDepsHash "$metadata") == sha256-* ]] \
+      || die "core pnpm store is not hash-pinned"
+    grep -Fq 'pnpm_config_offline=true pnpm rebuild' "$root/package.nix" \
+      || die "pnpm lifecycle scripts are not forced offline"
+  fi
+  grep -Fq '/run/opengl-driver/lib' "$root/nix/br-wrapper.sh" \
+    || die "wrapper does not select the NixOS graphics runtime"
+  grep -Fq 'LIBVA_DRIVERS_PATH=' "$root/nix/br-wrapper.sh" \
+    || die "wrapper does not configure VA-API driver discovery"
+  grep -Fq -- "--replace-fail '@mesa@'" "$root/package.nix" \
+    || die "package does not retain the Mesa runtime in its closure"
   [[ $(grep -Fc 'for root, _, files in' "$root/patches/0000-fix-brave-patch-walker.patch") == 2 ]] \
     || die "Brave patch walker compatibility fix is incomplete"
   [[ $(grep -nF '0000-fix-brave-patch-walker.patch' "$root/package.nix" | head -n1 | cut -d: -f1) \
@@ -76,8 +93,6 @@ verify_source() {
     || die "Brave patch walker does not use the offset-aware patch backend"
   grep -Fq 'cp chrome/VERSION chrome/VERSION.chromium' "$root/package.nix" \
     || die "Chromium version sidecar is not generated for the Git-free source"
-  [[ $(jq -r .coreNodeModulesHash "$metadata") == sha256-* ]] \
-    || die "core node_modules output is not hash-pinned"
   ! grep -R -Fq -- '--impure' "$root/package.nix" "$root/nix" \
     || die "normal package evaluation is impure"
   printf 'source policy: ok\n'

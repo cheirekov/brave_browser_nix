@@ -32,11 +32,39 @@ jobs:
       - if: steps.check.outputs.update_available == 'true'
         id: update
         name: Regenerate and verify source metadata
-        run: ./scripts/update.sh
-      - if: steps.check.outputs.update_available == 'true'
+        env:
+          OLD_VERSION: ${{ steps.check.outputs.old_version }}
+          NEW_VERSION: ${{ steps.check.outputs.new_version }}
+        run: |
+          set +e
+          ./scripts/update.sh
+          status=$?
+          set -e
+          case "$status" in
+            0)
+              echo 'ready=true' >> "$GITHUB_OUTPUT"
+              ;;
+            75)
+              echo 'ready=false' >> "$GITHUB_OUTPUT"
+              echo 'deferred=true' >> "$GITHUB_OUTPUT"
+              echo "::notice::Brave ${NEW_VERSION} is deferred until nixpkgs provides its exact Chromium revision"
+              {
+                echo '## Brave Stable update deferred'
+                echo
+                echo "- Current Brave: \`${OLD_VERSION}\`"
+                echo "- Available Brave: \`${NEW_VERSION}\`"
+                echo '- Reason: the locked nixpkgs Chromium revision does not yet match Brave'
+                echo '- Metadata was restored; no pull request was published'
+              } >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            *)
+              exit "$status"
+              ;;
+          esac
+      - if: steps.update.outputs.ready == 'true'
         name: Test automation policy
         run: python3 -m unittest discover -s tests -v
-      - if: steps.check.outputs.update_available == 'true'
+      - if: steps.update.outputs.ready == 'true'
         name: Create or update the guarded Stable PR
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

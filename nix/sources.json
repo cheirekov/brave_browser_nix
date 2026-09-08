@@ -3,6 +3,7 @@
   "tag": "v1.93.138",
   "channel": "stable",
   "chromiumVersion": "151.0.7922.173",
+  "corePackageManager": "npm",
   "core": {
     "url": "https://github.com/brave/brave-core/archive/refs/tags/v1.93.138.tar.gz",
     "hash": "sha256-aTTqfikrXHkTyGo9QEeOdM/Oo8UaI5fxLv6w+ERyFiM="

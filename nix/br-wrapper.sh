@@ -10,7 +10,24 @@ else
 fi
 
 export CHROME_WRAPPER=br
-export LD_LIBRARY_PATH="@libPath@${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+if [[ -d /run/opengl-driver/lib ]]; then
+  graphics_root=/run/opengl-driver
+else
+  graphics_root=@mesa@
+fi
+graphics_lib="$graphics_root/lib"
+graphics_share="$graphics_root/share"
+
+export LD_LIBRARY_PATH="$graphics_lib:@libPath@${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export LIBGL_DRIVERS_PATH="$graphics_lib/dri${LIBGL_DRIVERS_PATH:+:$LIBGL_DRIVERS_PATH}"
+export LIBVA_DRIVERS_PATH="$graphics_lib/dri${LIBVA_DRIVERS_PATH:+:$LIBVA_DRIVERS_PATH}"
+export __EGL_VENDOR_LIBRARY_DIRS="$graphics_share/glvnd/egl_vendor.d${__EGL_VENDOR_LIBRARY_DIRS:+:$__EGL_VENDOR_LIBRARY_DIRS}"
+if compgen -G "$graphics_share/vulkan/icd.d/*.json" >/dev/null; then
+  mapfile -t vulkan_icds < <(printf '%s\n' "$graphics_share"/vulkan/icd.d/*.json)
+  IFS=:
+  export VK_DRIVER_FILES="${vulkan_icds[*]}${VK_DRIVER_FILES:+:$VK_DRIVER_FILES}"
+  unset IFS
+fi
 export PATH="$PATH:@xdgUtils@"
 
 wayland_args=()

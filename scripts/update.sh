@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Temporary condition: the locked nixpkgs Chromium has not reached the exact
+# revision required by the current Brave Stable release.
+readonly NIXPKGS_CHROMIUM_DEFERRED=75
+
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 metadata="$repo_root/nix/sources.json"
 check_only=false
@@ -103,32 +107,58 @@ pinned_chromium=$(cd "$repo_root" && nix eval --impure --raw --expr \
 if [[ $pinned_chromium != "$chromium_version" ]]; then
   printf 'nixpkgs Chromium is %s, but Brave requires %s; retry after nixpkgs updates\n' \
     "$pinned_chromium" "$chromium_version" >&2
-  exit 1
+  exit "$NIXPKGS_CHROMIUM_DEFERRED"
 fi
 
-core_npm_log="$temporary/core-npm.log"
-if ! (cd "$repo_root" && nix build --no-link --impure --expr \
-  'let f = builtins.getFlake (toString ./.); pkgs = import f.inputs.nixpkgs { system = "x86_64-linux"; }; in (import ./nix/source.nix { inherit pkgs; }).coreNodeModules') \
-  >"$core_npm_log" 2>&1; then
-  got=$(sed -n 's/^[[:space:]]*got:[[:space:]]*\(sha256-[^[:space:]]*\)$/\1/p' "$core_npm_log" | tail -1)
-  [[ -n $got ]] || { cat "$core_npm_log" >&2; exit 1; }
-  jq --arg hash "$got" '.coreNodeModulesHash = $hash' "$metadata" > "$temporary/sources.updated.json"
-  cp "$temporary/sources.updated.json" "$metadata"
+package_manager=$(jq -r '.corePackageManager // "npm"' "$metadata")
+case $package_manager in
+pnpm)
+  core_pnpm_log="$temporary/core-pnpm.log"
+  if ! (cd "$repo_root" && nix build --no-link --impure --expr \
+    'let f = builtins.getFlake (toString ./.); pkgs = import f.inputs.nixpkgs { system = "x86_64-linux"; }; in (import ./nix/source.nix { inherit pkgs; }).corePnpmDeps') \
+    >"$core_pnpm_log" 2>&1; then
+    got=$(sed -n 's/^[[:space:]]*got:[[:space:]]*\(sha256-[^[:space:]]*\)$/\1/p' "$core_pnpm_log" | tail -1)
+    [[ -n $got ]] || { cat "$core_pnpm_log" >&2; exit 1; }
+    jq --arg hash "$got" '.corePnpmDepsHash = $hash' "$metadata" > "$temporary/sources.updated.json"
+    cp "$temporary/sources.updated.json" "$metadata"
+    (cd "$repo_root" && nix build --no-link --impure --expr \
+      'let f = builtins.getFlake (toString ./.); pkgs = import f.inputs.nixpkgs { system = "x86_64-linux"; }; in (import ./nix/source.nix { inherit pkgs; }).corePnpmDeps')
+  fi
+  # Prove that pnpm 11 can reconstruct the workspace offline. Lifecycle
+  # scripts run later in the writable browser source tree under allowBuilds.
   (cd "$repo_root" && nix build --no-link --impure --expr \
     'let f = builtins.getFlake (toString ./.); pkgs = import f.inputs.nixpkgs { system = "x86_64-linux"; }; in (import ./nix/source.nix { inherit pkgs; }).coreNodeModules')
-fi
+  ;;
+npm)
+  core_npm_log="$temporary/core-npm.log"
+  if ! (cd "$repo_root" && nix build --no-link --impure --expr \
+    'let f = builtins.getFlake (toString ./.); pkgs = import f.inputs.nixpkgs { system = "x86_64-linux"; }; in (import ./nix/source.nix { inherit pkgs; }).coreNodeModules') \
+    >"$core_npm_log" 2>&1; then
+    got=$(sed -n 's/^[[:space:]]*got:[[:space:]]*\(sha256-[^[:space:]]*\)$/\1/p' "$core_npm_log" | tail -1)
+    [[ -n $got ]] || { cat "$core_npm_log" >&2; exit 1; }
+    jq --arg hash "$got" '.coreNodeModulesHash = $hash' "$metadata" > "$temporary/sources.updated.json"
+    cp "$temporary/sources.updated.json" "$metadata"
+    (cd "$repo_root" && nix build --no-link --impure --expr \
+      'let f = builtins.getFlake (toString ./.); pkgs = import f.inputs.nixpkgs { system = "x86_64-linux"; }; in (import ./nix/source.nix { inherit pkgs; }).coreNodeModules')
+  fi
 
-leo_log="$temporary/leo.log"
-if ! (cd "$repo_root" && nix build --no-link --impure --expr \
-  'let f = builtins.getFlake (toString ./.); pkgs = import f.inputs.nixpkgs { system = "x86_64-linux"; }; in (import ./nix/source.nix { inherit pkgs; }).leoArtifacts') \
-  >"$leo_log" 2>&1; then
-  got=$(sed -n 's/^[[:space:]]*got:[[:space:]]*\(sha256-[^[:space:]]*\)$/\1/p' "$leo_log" | tail -1)
-  [[ -n $got ]] || { cat "$leo_log" >&2; exit 1; }
-  jq --arg hash "$got" '.leoNpmDepsHash = $hash' "$metadata" > "$temporary/sources.updated.json"
-  cp "$temporary/sources.updated.json" "$metadata"
-  (cd "$repo_root" && nix build --no-link --impure --expr \
-    'let f = builtins.getFlake (toString ./.); pkgs = import f.inputs.nixpkgs { system = "x86_64-linux"; }; in (import ./nix/source.nix { inherit pkgs; }).leoArtifacts')
-fi
+  leo_log="$temporary/leo.log"
+  if ! (cd "$repo_root" && nix build --no-link --impure --expr \
+    'let f = builtins.getFlake (toString ./.); pkgs = import f.inputs.nixpkgs { system = "x86_64-linux"; }; in (import ./nix/source.nix { inherit pkgs; }).leoArtifacts') \
+    >"$leo_log" 2>&1; then
+    got=$(sed -n 's/^[[:space:]]*got:[[:space:]]*\(sha256-[^[:space:]]*\)$/\1/p' "$leo_log" | tail -1)
+    [[ -n $got ]] || { cat "$leo_log" >&2; exit 1; }
+    jq --arg hash "$got" '.leoNpmDepsHash = $hash' "$metadata" > "$temporary/sources.updated.json"
+    cp "$temporary/sources.updated.json" "$metadata"
+    (cd "$repo_root" && nix build --no-link --impure --expr \
+      'let f = builtins.getFlake (toString ./.); pkgs = import f.inputs.nixpkgs { system = "x86_64-linux"; }; in (import ./nix/source.nix { inherit pkgs; }).leoArtifacts')
+  fi
+  ;;
+*)
+  printf 'unsupported core package manager: %s\n' "$package_manager" >&2
+  exit 1
+  ;;
+esac
 
 wdp_log="$temporary/wdp.log"
 if ! (cd "$repo_root" && nix build --no-link --impure --expr \

@@ -59,9 +59,14 @@
             touch "$out"
           '';
 
-          npm-dependencies = package.unwrapped.passthru.sources.coreNodeModules;
-          leo-artifacts = package.unwrapped.passthru.sources.leoArtifacts;
+          core-dependencies = package.unwrapped.passthru.sources.coreNodeModules;
           devtools-esbuild = package.unwrapped.passthru.sources.devtoolsEsbuild;
+        }
+        // nixpkgs.lib.optionalAttrs ((sourceMetadata.corePackageManager or "npm") == "npm") {
+          leo-artifacts = package.unwrapped.passthru.sources.leoArtifacts;
+        }
+        // nixpkgs.lib.optionalAttrs ((sourceMetadata.corePackageManager or "npm") == "pnpm") {
+          core-pnpm-cache = package.unwrapped.passthru.sources.corePnpmDeps;
         }
       );
 

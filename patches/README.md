@@ -25,3 +25,7 @@ Tor is disabled independently with Brave's supported `enable_tor=false` GN
 argument. Apart from the compatibility fix needed to run Brave's patch driver,
 Brave's own patch series remains unchanged and is applied before the profile
 path patch.
+
+The runtime graphics fix does not require a source patch. The installed wrapper
+uses `/run/opengl-driver` on NixOS and the packaged Mesa runtime elsewhere,
+setting GLX/EGL, DRI, VA-API, and Vulkan discovery paths before starting `br`.

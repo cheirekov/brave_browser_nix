@@ -10,6 +10,18 @@ note() {
   printf 'publish-update-pr: %s\n' "$*"
 }
 
+version_is_older() {
+  local candidate=$1 reference=$2 candidate_major candidate_minor candidate_patch
+  local reference_major reference_minor reference_patch
+  IFS=. read -r candidate_major candidate_minor candidate_patch <<<"$candidate"
+  IFS=. read -r reference_major reference_minor reference_patch <<<"$reference"
+  ((10#$candidate_major < 10#$reference_major)) && return 0
+  ((10#$candidate_major > 10#$reference_major)) && return 1
+  ((10#$candidate_minor < 10#$reference_minor)) && return 0
+  ((10#$candidate_minor > 10#$reference_minor)) && return 1
+  ((10#$candidate_patch < 10#$reference_patch))
+}
+
 [[ $# == 2 ]] || die "usage: publish_update_pr.sh OLD_VERSION NEW_VERSION"
 old_version=$1
 new_version=$2
@@ -166,8 +178,70 @@ else
   fi
 fi
 
-pr_url=$(gh pr view "$branch" --repo "$repository" --json url --jq .url)
+pr_json=$(gh pr view "$branch" --repo "$repository" --json number,url)
+pr_number=$(jq -r .number <<<"$pr_json")
+pr_url=$(jq -r .url <<<"$pr_json")
 note "PR ${action}: ${pr_url}"
+
+# Close only older Stable PRs whose GitHub identity, commit identity, subject,
+# ancestry and changed paths all prove that they were produced by this script.
+open_prs=$(gh api --method GET "repos/${repository}/pulls" \
+  -f state=open -f base="$base_branch" -f per_page=100)
+while IFS=$'\t' read -r candidate_number candidate_title candidate_user candidate_branch candidate_repo; do
+  [[ -n $candidate_number && $candidate_number != "$pr_number" ]] || continue
+  if [[ $candidate_branch =~ ^automation/brave-([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+    candidate_version=${BASH_REMATCH[1]}
+  else
+    continue
+  fi
+  version_is_older "$candidate_version" "$new_version" || continue
+  expected_candidate_subject="brave: update upstream to ${candidate_version}"
+  if [[ $candidate_user != 'github-actions[bot]' \
+      || $candidate_repo != "$repository" \
+      || $candidate_title != "$expected_candidate_subject" ]]; then
+    note "leaving PR #${candidate_number} open: ownership or title is not provably automated"
+    continue
+  fi
+
+  candidate_ref="refs/remotes/origin/${candidate_branch}"
+  if ! candidate_line=$(git ls-remote --exit-code --heads origin "refs/heads/${candidate_branch}"); then
+    note "leaving PR #${candidate_number} open: branch cannot be verified"
+    continue
+  fi
+  candidate_sha=${candidate_line%%[[:space:]]*}
+  if ! git fetch --no-tags origin \
+      "+refs/heads/${candidate_branch}:${candidate_ref}" >/dev/null 2>&1 \
+      || [[ $(git rev-parse "$candidate_ref") != "$candidate_sha" ]] \
+      || [[ $(git show -s --format=%ae "$candidate_ref") != "$bot_email" ]] \
+      || [[ $(git show -s --format=%s "$candidate_ref") != "$expected_candidate_subject" ]] \
+      || [[ $(git rev-list --count "refs/remotes/origin/${base_branch}..${candidate_ref}") != 1 ]]; then
+    note "leaving PR #${candidate_number} open: branch history is not provably automated"
+    continue
+  fi
+
+  candidate_base=$(git merge-base "refs/remotes/origin/${base_branch}" "$candidate_ref")
+  mapfile -t candidate_files < <(git diff --name-only "$candidate_base" "$candidate_ref")
+  candidate_paths_safe=true
+  ((${#candidate_files[@]} > 0)) || candidate_paths_safe=false
+  for path in "${candidate_files[@]}"; do
+    case $path in
+      flake.lock|nix/sources.json) ;;
+      *) candidate_paths_safe=false ;;
+    esac
+  done
+  if [[ $candidate_paths_safe != true ]]; then
+    note "leaving PR #${candidate_number} open: branch changes files outside update metadata"
+    continue
+  fi
+
+  gh pr close "$candidate_number" --repo "$repository" \
+    --comment "Superseded by ${pr_url}, which carries Brave ${new_version}. The branch is retained."
+  note "closed superseded automation PR #${candidate_number}; branch retained"
+done < <(
+  jq -r '.[] | [.number, .title, .user.login, .head.ref, (.head.repo.full_name // "")] | @tsv' \
+    <<<"$open_prs"
+)
+
 if [[ -n ${GITHUB_STEP_SUMMARY:-} ]]; then
   printf '%s\n' \
     "## Brave Stable update PR" \
