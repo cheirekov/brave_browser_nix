@@ -82,6 +82,11 @@ verify_source() {
     || die "wrapper does not select the NixOS graphics runtime"
   grep -Fq 'LIBVA_DRIVERS_PATH=' "$root/nix/br-wrapper.sh" \
     || die "wrapper does not configure VA-API driver discovery"
+  ! grep -Eq '\b(compgen|mapfile)\b' "$root/nix/br-wrapper.sh" \
+    || die "wrapper requires Bash builtins absent from Nix's minimal runtime shell"
+  grep -Fq 'for vulkan_icd in "$graphics_share"/vulkan/icd.d/*.json' \
+    "$root/nix/br-wrapper.sh" \
+    || die "wrapper does not discover packaged Vulkan ICDs"
   grep -Fq -- "--replace-fail '@mesa@'" "$root/package.nix" \
     || die "package does not retain the Mesa runtime in its closure"
   [[ $(grep -Fc 'for root, _, files in' "$root/patches/0000-fix-brave-patch-walker.patch") == 2 ]] \

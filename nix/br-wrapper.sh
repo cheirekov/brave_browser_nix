@@ -22,8 +22,12 @@ export LD_LIBRARY_PATH="$graphics_lib:@libPath@${LD_LIBRARY_PATH:+:$LD_LIBRARY_P
 export LIBGL_DRIVERS_PATH="$graphics_lib/dri${LIBGL_DRIVERS_PATH:+:$LIBGL_DRIVERS_PATH}"
 export LIBVA_DRIVERS_PATH="$graphics_lib/dri${LIBVA_DRIVERS_PATH:+:$LIBVA_DRIVERS_PATH}"
 export __EGL_VENDOR_LIBRARY_DIRS="$graphics_share/glvnd/egl_vendor.d${__EGL_VENDOR_LIBRARY_DIRS:+:$__EGL_VENDOR_LIBRARY_DIRS}"
-if compgen -G "$graphics_share/vulkan/icd.d/*.json" >/dev/null; then
-  mapfile -t vulkan_icds < <(printf '%s\n' "$graphics_share"/vulkan/icd.d/*.json)
+vulkan_icds=()
+for vulkan_icd in "$graphics_share"/vulkan/icd.d/*.json; do
+  [[ -e $vulkan_icd ]] || continue
+  vulkan_icds+=("$vulkan_icd")
+done
+if ((${#vulkan_icds[@]})); then
   IFS=:
   export VK_DRIVER_FILES="${vulkan_icds[*]}${VK_DRIVER_FILES:+:$VK_DRIVER_FILES}"
   unset IFS
