@@ -12,6 +12,7 @@
   gtk3,
   gtk4,
   libkrb5,
+  mesa,
   xdg-utils,
 }:
 let
@@ -29,6 +30,15 @@ let
     name = "br-browser";
     version = sources.version;
     packageName = "br";
+    # Brave carries the same Linux EULA default change in its own patch set.
+    # Applying nixpkgs' Chromium backport first makes Brave's patch driver
+    # correctly reject the duplicate as already applied.
+    patches = builtins.filter (
+      patch:
+      !(lib.hasInfix "revert-Show-Linux-first-run-terms-of-service-dialog-by-default.patch" (
+        toString patch
+      ))
+    ) (base.patches or [ ]);
     buildTargets = [
       "chrome_sandbox"
       "brave"
@@ -61,20 +71,33 @@ let
       mkdir -p "$HOME"
       cp -a ${sources.coreNodeModules}/node_modules brave/
       chmod -R u+w brave/node_modules
-      mkdir -p "$TMPDIR/br-npm-cache"
-      (
-        cd brave
-        patchShebangs node_modules
-        npm_config_cache="$TMPDIR/br-npm-cache" \
-          npm rebuild --offline --no-audit --no-fund
-        patchShebangs node_modules
-      )
-      # @brave/leo is a Git dependency whose generated artifacts are normally
-      # produced by its prepare script. Build those with their own pinned npm
-      # dependency graph and install the prepared package here.
-      rm -rf brave/node_modules/@brave/leo
-      cp -a ${sources.leoArtifacts} brave/node_modules/@brave/leo
-      chmod -R u+w brave/node_modules/@brave/leo
+      ${
+        if sources.corePackageManager == "pnpm" then
+          ''
+            (
+              cd brave
+              patchShebangs node_modules
+              pnpm_config_offline=true pnpm rebuild
+              patchShebangs node_modules
+            )
+          ''
+        else
+          ''
+            mkdir -p "$TMPDIR/br-npm-cache"
+            (
+              cd brave
+              patchShebangs node_modules
+              npm_config_cache="$TMPDIR/br-npm-cache" \
+                npm rebuild --offline --no-audit --no-fund
+              patchShebangs node_modules
+            )
+            # npm-era releases use a Git dependency whose prepare artifacts
+            # are built from a separately pinned dependency graph.
+            rm -rf brave/node_modules/@brave/leo
+            cp -a ${sources.leoArtifacts} brave/node_modules/@brave/leo
+            chmod -R u+w brave/node_modules/@brave/leo
+          ''
+      }
       mkdir -p brave/vendor/web-discovery-project/node_modules
       cp -a ${sources.wdpNodeModules}/node_modules/. \
         brave/vendor/web-discovery-project/node_modules/
@@ -85,7 +108,7 @@ let
         brave/vendor/web-discovery-project/node_modules \
         brave/vendor/web-discovery-project/modules
 
-      # Brave 1.93.137 accidentally unpacks os.walk() as a two-tuple in its
+      # Brave 1.93 releases unpack os.walk() as a two-tuple in their
       # legacy patch driver.  Fix the pinned helper before asking it to apply
       # Brave's own Chromium patch series.
       patch -p1 < ${./patches/0000-fix-brave-patch-walker.patch}
@@ -164,6 +187,10 @@ let
       export PYTHONUNBUFFERED=1
       export CARGO_NET_OFFLINE=true
     '';
+
+    nativeBuildInputs =
+      (base.nativeBuildInputs or [ ])
+      ++ lib.optionals (sources.corePackageManager == "pnpm") [ pkgs.pnpm_11 ];
 
     gnFlags = {
       # This upstream GN argument generates BUILDFLAG(ENABLE_TOR).
@@ -276,6 +303,7 @@ stdenv.mkDerivation {
       --replace-fail '@browser@' '${unwrapped}/libexec/br/br' \
       --replace-fail '@sandbox@' '${unwrapped.sandbox}/bin/br-sandbox' \
       --replace-fail '@libPath@' '${libPath}' \
+      --replace-fail '@mesa@' '${mesa}' \
       --replace-fail '@xdgUtils@' '${xdg-utils}/bin'
     install -m644 ${./assets/br.svg} "$out/share/icons/hicolor/scalable/apps/br.svg"
     ln -s ${unwrapped}/share/br/build-args.gn "$out/share/br/build-args.gn"

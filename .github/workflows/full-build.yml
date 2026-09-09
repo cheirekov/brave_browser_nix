@@ -87,7 +87,7 @@ jobs:
   build:
     name: build Brave ${{ needs.validate-selection.outputs.version }} at ${{ needs.validate-selection.outputs.ref }}
     needs: validate-selection
-    uses: cheirekov/nix-aws-build-infra/.github/workflows/nix-build.yml@a2039c6a4027c97d76b94fc9e7509405b4438a98
+    uses: cheirekov/nix-aws-build-infra/.github/workflows/nix-build.yml@592e14db659210294151018d47b3153327203df3
     permissions:
       contents: read
       id-token: write

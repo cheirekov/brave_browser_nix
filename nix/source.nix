@@ -1,8 +1,9 @@
 {
   pkgs,
+  metadataFile ? ./sources.json,
 }:
 let
-  metadata = builtins.fromJSON (builtins.readFile ./sources.json);
+  metadata = builtins.fromJSON (builtins.readFile metadataFile);
   fetch =
     value:
     pkgs.fetchzip {
@@ -12,27 +13,46 @@ let
   deps = pkgs.lib.mapAttrs (_path: fetch) metadata.deps;
   core = fetch metadata.core;
   devtoolsEsbuild = fetch metadata.devtoolsEsbuild;
-  leo = fetch metadata.leo;
+  corePackageManager = metadata.corePackageManager or "npm";
+  isPnpm = corePackageManager == "pnpm";
+  leo = if isPnpm then null else fetch metadata.leo;
 
-  leoArtifacts = pkgs.buildNpmPackage {
-    pname = "br-leo-artifacts";
-    inherit (metadata) version;
-    src = leo;
-    nodejs = pkgs.nodejs_24;
-    npmDepsHash = metadata.leoNpmDepsHash;
-    makeCacheWritable = true;
-    npmBuildScript = "build";
-    dontFixup = true;
-    installPhase = ''
-      runHook preInstall
-      rm -rf node_modules
-      mkdir -p "$out"
-      cp -a . "$out/"
-      runHook postInstall
-    '';
-  };
+  leoArtifacts =
+    if isPnpm then
+      null
+    else
+      pkgs.buildNpmPackage {
+        pname = "br-leo-artifacts";
+        inherit (metadata) version;
+        src = leo;
+        nodejs = pkgs.nodejs_24;
+        npmDepsHash = metadata.leoNpmDepsHash;
+        makeCacheWritable = true;
+        npmBuildScript = "build";
+        dontFixup = true;
+        installPhase = ''
+          runHook preInstall
+          rm -rf node_modules
+          mkdir -p "$out"
+          cp -a . "$out/"
+          runHook postInstall
+        '';
+      };
 
-  coreNodeModules = pkgs.stdenvNoCC.mkDerivation {
+  corePnpmDeps =
+    if isPnpm then
+      pkgs.fetchPnpmDeps {
+        pname = "br-core-pnpm-deps";
+        inherit (metadata) version;
+        src = core;
+        pnpm = pkgs.pnpm_11;
+        fetcherVersion = 4;
+        hash = metadata.corePnpmDepsHash;
+      }
+    else
+      null;
+
+  npmCoreNodeModules = pkgs.stdenvNoCC.mkDerivation {
     pname = "br-core-node-modules";
     inherit (metadata) version;
     nativeBuildInputs = [
@@ -62,6 +82,28 @@ let
       runHook postInstall
     '';
   };
+
+  pnpmCoreNodeModules = pkgs.stdenvNoCC.mkDerivation {
+    pname = "br-core-node-modules";
+    inherit (metadata) version;
+    src = core;
+    pnpmDeps = corePnpmDeps;
+    nativeBuildInputs = [
+      pkgs.nodejs_24
+      pkgs.pnpm_11
+      pkgs.pnpmConfigHook
+    ];
+    dontBuild = true;
+    dontFixup = true;
+    installPhase = ''
+      runHook preInstall
+      mkdir -p "$out"
+      cp -a node_modules "$out/"
+      runHook postInstall
+    '';
+  };
+
+  coreNodeModules = if isPnpm then pnpmCoreNodeModules else npmCoreNodeModules;
 
   wdpNodeModules = pkgs.stdenvNoCC.mkDerivation {
     pname = "br-web-discovery-node-modules";
@@ -94,7 +136,9 @@ metadata
 // {
   inherit
     core
+    corePackageManager
     coreNodeModules
+    corePnpmDeps
     deps
     devtoolsEsbuild
     leo

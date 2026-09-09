@@ -51,6 +51,23 @@ def deps_from_file(path: pathlib.Path) -> dict[str, str]:
     return result
 
 
+def detect_package_manager(core: pathlib.Path) -> str:
+    """Return the one supported lockfile format present in brave-core."""
+    lockfiles = {
+        "npm": core / "package-lock.json",
+        "pnpm": core / "pnpm-lock.yaml",
+    }
+    found = [manager for manager, path in lockfiles.items() if path.is_file()]
+    if len(found) != 1:
+        names = ", ".join(path.name for path in lockfiles.values())
+        raise RuntimeError(
+            f"expected exactly one supported root lockfile ({names}); found {len(found)}"
+        )
+    if found[0] == "pnpm" and not (core / "pnpm-workspace.yaml").is_file():
+        raise RuntimeError("pnpm-lock.yaml requires pnpm-workspace.yaml")
+    return found[0]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--version", required=True)
@@ -64,14 +81,19 @@ def main() -> int:
         raise RuntimeError("requested version does not match brave-core package.json")
     chromium_version = package["config"]["projects"]["chrome"]["tag"]
     urls = deps_from_file(args.core / "DEPS")
-    leo_dependency = package["dependencies"]["@brave/leo"]
-    leo_match = re.fullmatch(r"github:brave/leo#([0-9a-f]{40})", leo_dependency)
-    if not leo_match:
-        raise RuntimeError(f"unsupported @brave/leo dependency: {leo_dependency!r}")
-    leo_url = f"https://github.com/brave/leo/archive/{leo_match.group(1)}.tar.gz"
+    package_manager = detect_package_manager(args.core)
+    leo_url = None
+    if package_manager == "npm":
+        leo_dependency = package["dependencies"]["@brave/leo"]
+        leo_match = re.fullmatch(r"github:brave/leo#([0-9a-f]{40})", leo_dependency)
+        if not leo_match:
+            raise RuntimeError(f"unsupported @brave/leo dependency: {leo_dependency!r}")
+        leo_url = f"https://github.com/brave/leo/archive/{leo_match.group(1)}.tar.gz"
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
-        source_urls = {**urls, "@brave/leo": leo_url}
+        source_urls = dict(urls)
+        if leo_url is not None:
+            source_urls["@brave/leo"] = leo_url
         hashes = dict(
             zip(source_urls, pool.map(prefetch, source_urls.values()), strict=True)
         )
@@ -82,8 +104,7 @@ def main() -> int:
     old_wdp = old.get("deps", {}).get("vendor/web-discovery-project", {}).get("url")
     new_wdp = urls.get("vendor/web-discovery-project")
     wdp_hash = old.get("wdpNodeModulesHash") if old_wdp == new_wdp else None
-    old_leo = old.get("leo", {}).get("url")
-    leo_npm_hash = old.get("leoNpmDepsHash") if old_leo == leo_url else None
+    old_manager = old.get("corePackageManager", "npm")
 
     metadata = {
         "version": args.version,
@@ -94,15 +115,7 @@ def main() -> int:
             "url": new_core,
             "hash": args.core_hash,
         },
-        "coreNodeModulesHash": old.get("coreNodeModulesHash")
-        if old_core == new_core
-        else "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-        "leo": {
-            "url": leo_url,
-            "hash": hashes["@brave/leo"],
-        },
-        "leoNpmDepsHash": leo_npm_hash
-        or "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+        "corePackageManager": package_manager,
         # This matches Chromium's pinned DevTools esbuild version and must be
         # reviewed when Chromium changes. Preserve it so updates remain
         # evaluable until that review is made.
@@ -113,6 +126,26 @@ def main() -> int:
             for destination, url in sorted(urls.items())
         },
     }
+    placeholder = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+    if package_manager == "pnpm":
+        metadata["corePnpmDepsHash"] = (
+            old.get("corePnpmDepsHash")
+            if old_core == new_core and old_manager == "pnpm"
+            else placeholder
+        )
+    else:
+        old_leo = old.get("leo", {}).get("url")
+        leo_npm_hash = old.get("leoNpmDepsHash") if old_leo == leo_url else None
+        metadata["coreNodeModulesHash"] = (
+            old.get("coreNodeModulesHash")
+            if old_core == new_core and old_manager == "npm"
+            else placeholder
+        )
+        metadata["leo"] = {
+            "url": leo_url,
+            "hash": hashes["@brave/leo"],
+        }
+        metadata["leoNpmDepsHash"] = leo_npm_hash or placeholder
     temporary = args.output.with_suffix(".json.new")
     temporary.write_text(json.dumps(metadata, indent=2) + "\n")
     temporary.replace(args.output)

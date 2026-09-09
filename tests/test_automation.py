@@ -5,8 +5,12 @@ import os
 import pathlib
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+from scripts.update_sources import detect_package_manager
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -75,6 +79,103 @@ class UpdateCheckTests(unittest.TestCase):
         self.assertIn("invalid Brave Stable endpoint response", result.stderr)
 
 
+class PackageManagerDetectionTests(unittest.TestCase):
+    def test_npm_lockfile_is_supported(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            (root / "package-lock.json").touch()
+            self.assertEqual(detect_package_manager(root), "npm")
+
+    def test_pnpm_workspace_is_supported(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            (root / "pnpm-lock.yaml").touch()
+            (root / "pnpm-workspace.yaml").touch()
+            self.assertEqual(detect_package_manager(root), "pnpm")
+
+    def test_ambiguous_or_unknown_lockfiles_are_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            with self.assertRaisesRegex(RuntimeError, "exactly one"):
+                detect_package_manager(root)
+            (root / "package-lock.json").touch()
+            (root / "pnpm-lock.yaml").touch()
+            (root / "pnpm-workspace.yaml").touch()
+            with self.assertRaisesRegex(RuntimeError, "exactly one"):
+                detect_package_manager(root)
+
+
+class DeferredUpdateTests(unittest.TestCase):
+    def test_chromium_mismatch_returns_75_and_restores_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            work = pathlib.Path(temporary) / "repo"
+            fake_bin = pathlib.Path(temporary) / "bin"
+            (work / "scripts").mkdir(parents=True)
+            (work / "nix").mkdir()
+            fake_bin.mkdir()
+            shutil.copy2(ROOT / "scripts/update.sh", work / "scripts/update.sh")
+            shutil.copy2(
+                ROOT / "scripts/update_sources.py", work / "scripts/update_sources.py"
+            )
+            metadata = {
+                "version": "1.0.0",
+                "channel": "stable",
+                "chromiumVersion": "1.0.0.0",
+            }
+            metadata_path = work / "nix/sources.json"
+            metadata_path.write_text(json.dumps(metadata) + "\n")
+            lock_path = work / "flake.lock"
+            lock_path.write_text("original lock\n")
+
+            fake_curl = fake_bin / "curl"
+            fake_curl.write_text("#!/usr/bin/env bash\nprintf '1.0.1\\n'\n")
+            fake_nix = fake_bin / "nix"
+            fake_nix.write_text(
+                "#!/usr/bin/env bash\n"
+                "set -euo pipefail\n"
+                "if [[ $1 == store ]]; then\n"
+                "  printf '{\"storePath\":\"/tmp/core\",\"hash\":\"sha256-core\"}\\n'\n"
+                "elif [[ $1 == flake ]]; then\n"
+                "  printf 'updated lock\\n' > flake.lock\n"
+                "elif [[ $1 == eval ]]; then\n"
+                "  printf '1.9.0.0'\n"
+                "else\n"
+                "  exit 2\n"
+                "fi\n"
+            )
+            fake_python = fake_bin / "python3"
+            fake_python.write_text(
+                "#!/usr/bin/env bash\n"
+                "set -euo pipefail\n"
+                "output=\n"
+                "while (($#)); do\n"
+                "  if [[ $1 == --output ]]; then output=$2; shift; fi\n"
+                "  shift\n"
+                "done\n"
+                "jq '.version=\"1.0.1\" | .chromiumVersion=\"2.0.0.0\"' \"$output\" > \"$output.new\"\n"
+                "mv \"$output.new\" \"$output\"\n"
+                "printf '2.0.0.0\\n'\n"
+            )
+            for executable in (fake_curl, fake_nix, fake_python):
+                executable.chmod(0o755)
+
+            before_metadata = metadata_path.read_bytes()
+            before_lock = lock_path.read_bytes()
+            environment = os.environ.copy()
+            environment["PATH"] = f"{fake_bin}:{environment['PATH']}"
+            result = subprocess.run(
+                [work / "scripts/update.sh"],
+                cwd=work,
+                env=environment,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 75, result.stderr)
+            self.assertEqual(metadata_path.read_bytes(), before_metadata)
+            self.assertEqual(lock_path.read_bytes(), before_lock)
+
+
 class WorkflowPolicyTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -95,11 +196,23 @@ class WorkflowPolicyTests(unittest.TestCase):
         self.assertNotIn("nix build .#br", combined)
         self.assertNotIn("full-build.yml", self.update_workflow)
 
+    def test_chromium_lag_is_deferred_without_publishing(self) -> None:
+        self.assertIn("NIXPKGS_CHROMIUM_DEFERRED=75", self.updater)
+        self.assertIn("75)", self.update_workflow)
+        self.assertIn("deferred=true", self.update_workflow)
+        self.assertIn("steps.update.outputs.ready == 'true'", self.update_workflow)
+
+    def test_updater_keeps_real_failures_red(self) -> None:
+        self.assertIn('exit "$status"', self.update_workflow)
+        self.assertIn("unsupported core package manager", self.updater)
+
     def test_automation_branch_update_is_exact_lease_and_owned(self) -> None:
         self.assertIn("existing branch is not owned by github-actions[bot]", self.publisher)
         self.assertIn("--force-with-lease=refs/heads/${branch}:${existing_sha}", self.publisher)
         self.assertNotIn("git switch -C", self.publisher)
         self.assertIn("refusing to create a duplicate", self.publisher)
+        self.assertIn("Close only older Stable PRs", self.publisher)
+        self.assertNotIn("--delete-branch", self.publisher)
 
     def test_full_build_is_manual_only_and_confirms_identity(self) -> None:
         self.assertIn("workflow_dispatch:", self.build_workflow)
@@ -151,14 +264,19 @@ class PublishBranchIntegrationTests(unittest.TestCase):
             "set -euo pipefail\n"
             "case \"${1:-} ${2:-}\" in\n"
             "  'auth setup-git') exit 0 ;;\n"
-            "  'api --method') printf '[]\\n' ;;\n"
+            "  'api --method') if [[ \"$*\" == *'state=open'* && -n ${FAKE_OPEN_PRS:-} ]]; then cat \"$FAKE_OPEN_PRS\"; else printf '[]\\n'; fi ;;\n"
             "  'pr create') printf 'https://example.invalid/pr/1\\n' ;;\n"
             "  'pr edit') exit 0 ;;\n"
-            "  'pr view') printf 'https://example.invalid/pr/1\\n' ;;\n"
+            "  'pr view') printf '{\"number\":1,\"url\":\"https://example.invalid/pr/1\"}\\n' ;;\n"
+            "  'pr close') printf '%s\\n' \"$*\" >> \"$FAKE_CLOSE_LOG\" ;;\n"
             "  *) printf 'unexpected fake gh arguments: %s\\n' \"$*\" >&2; exit 2 ;;\n"
             "esac\n"
         )
         fake_gh.chmod(0o755)
+        self.open_prs = temporary / "open-prs.json"
+        self.close_log = temporary / "closed-prs.log"
+        self.open_prs.write_text("[]\n")
+        self.close_log.touch()
 
         self.git("init", "-b", "main", str(self.work), cwd=temporary)
         self.git("config", "user.name", "Repository Owner")
@@ -198,6 +316,8 @@ class PublishBranchIntegrationTests(unittest.TestCase):
     def publish(self) -> subprocess.CompletedProcess[str]:
         environment = os.environ.copy()
         environment["GITHUB_REPOSITORY"] = "owner/repository"
+        environment["FAKE_OPEN_PRS"] = str(self.open_prs)
+        environment["FAKE_CLOSE_LOG"] = str(self.close_log)
         environment["PATH"] = f"{self.fake_bin}:{environment['PATH']}"
         return subprocess.run(
             [self.work / "scripts/publish_update_pr.sh", self.OLD, self.NEW],
@@ -241,6 +361,67 @@ class PublishBranchIntegrationTests(unittest.TestCase):
             "--git-dir", str(self.remote), "rev-parse", f"refs/heads/{branch}"
         ).stdout.strip()
         self.assertEqual(foreign_sha, remote_sha)
+
+    def test_verified_older_bot_pr_is_closed(self) -> None:
+        older = "0.9.9"
+        branch = f"automation/brave-{older}"
+        self.git("switch", "-c", branch)
+        (self.work / "flake.lock").write_text('{"pin": -1}\n')
+        self.git("config", "user.name", "github-actions[bot]")
+        self.git(
+            "config",
+            "user.email",
+            "41898282+github-actions[bot]@users.noreply.github.com",
+        )
+        self.git("add", "flake.lock")
+        self.git("commit", "-m", f"brave: update upstream to {older}")
+        self.git("push", "origin", branch)
+        candidate = [{
+            "number": 2,
+            "title": f"brave: update upstream to {older}",
+            "user": {"login": "github-actions[bot]"},
+            "head": {
+                "ref": branch,
+                "repo": {"full_name": "owner/repository"},
+            },
+        }]
+        self.open_prs.write_text(json.dumps(candidate) + "\n")
+        self.git("checkout", "--detach", self.base_sha)
+        self.write_update()
+        result = self.publish()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("pr close 2", self.close_log.read_text())
+
+    def test_older_bot_pr_with_extra_file_remains_open(self) -> None:
+        older = "0.9.8"
+        branch = f"automation/brave-{older}"
+        self.git("switch", "-c", branch)
+        (self.work / "unexpected.txt").write_text("outside metadata\n")
+        self.git("config", "user.name", "github-actions[bot]")
+        self.git(
+            "config",
+            "user.email",
+            "41898282+github-actions[bot]@users.noreply.github.com",
+        )
+        self.git("add", "unexpected.txt")
+        self.git("commit", "-m", f"brave: update upstream to {older}")
+        self.git("push", "origin", branch)
+        candidate = [{
+            "number": 3,
+            "title": f"brave: update upstream to {older}",
+            "user": {"login": "github-actions[bot]"},
+            "head": {
+                "ref": branch,
+                "repo": {"full_name": "owner/repository"},
+            },
+        }]
+        self.open_prs.write_text(json.dumps(candidate) + "\n")
+        self.git("checkout", "--detach", self.base_sha)
+        self.write_update()
+        result = self.publish()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.close_log.read_text(), "")
+        self.assertIn("outside update metadata", result.stdout)
 
 
 if __name__ == "__main__":

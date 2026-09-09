@@ -56,12 +56,29 @@
             test ${nixpkgs.lib.escapeShellArg package.pname} = br
             test ${nixpkgs.lib.escapeShellArg package.version} = \
               ${nixpkgs.lib.escapeShellArg sourceMetadata.version}
+            test ${
+              nixpkgs.lib.escapeShellArg (
+                toString (
+                  nixpkgs.lib.all (
+                    patch:
+                    !(nixpkgs.lib.hasInfix "revert-Show-Linux-first-run-terms-of-service-dialog-by-default.patch" (
+                      toString patch
+                    ))
+                  ) package.unwrapped.patches
+                )
+              )
+            } = 1
             touch "$out"
           '';
 
-          npm-dependencies = package.unwrapped.passthru.sources.coreNodeModules;
-          leo-artifacts = package.unwrapped.passthru.sources.leoArtifacts;
+          core-dependencies = package.unwrapped.passthru.sources.coreNodeModules;
           devtools-esbuild = package.unwrapped.passthru.sources.devtoolsEsbuild;
+        }
+        // nixpkgs.lib.optionalAttrs ((sourceMetadata.corePackageManager or "npm") == "npm") {
+          leo-artifacts = package.unwrapped.passthru.sources.leoArtifacts;
+        }
+        // nixpkgs.lib.optionalAttrs ((sourceMetadata.corePackageManager or "npm") == "pnpm") {
+          core-pnpm-cache = package.unwrapped.passthru.sources.corePnpmDeps;
         }
       );
 

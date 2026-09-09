@@ -89,17 +89,15 @@ Chromium version. nixpkgs assembles that graph from individually hashed Gitiles
 sources; no `gclient` download or other network access occurs in the browser
 build.
 
-Core npm dependencies are realized as the separate fixed-output
-`coreNodeModules` derivation. This is necessary because Brave includes git
-dependencies whose nested legacy lockfiles cannot be represented correctly by
-the current nixpkgs npm cache fetcher. Network access is confined to that
-hash-pinned dependency derivation; its npm download cache is deliberately not
-copied into the result because npm records request timestamps and response
-dates there. The Chromium/Brave compilation consumes the immutable node tree
-offline. Store-specific shebang patching and native module rebuilds happen only
-in the normal sandboxed browser derivation, not in the fixed-output dependency
-result. The npm bootstrap can therefore be validated without unpacking or
-compiling Chromium.
+The metadata records Brave core's dependency manager. Releases through the
+1.93 line use the root `package-lock.json`; their dependencies and separate
+`@brave/leo` build remain compatible with the existing fixed-output npm path.
+Newer releases use `pnpm-lock.yaml`. They are fetched with pnpm 11,
+`fetchPnpmDeps`, and fetcher version 4, then installed offline with scripts
+disabled. The browser derivation runs only the lifecycle scripts authorized by
+upstream `allowBuilds`, so the workspace owns the `@brave/leo` preparation.
+The Chromium/Brave compilation consumes the resulting immutable node tree
+offline in both cases.
 
 The Web Discovery dependency is handled by its own fixed-output derivation.
 Both its npm tree and the patched generated `modules` tree are copied into the
@@ -125,6 +123,18 @@ All downstream modifications are described in this README and
 [`patches/README.md`](patches/README.md): the GN argument, output packaging,
 neutral icon, executable/desktop naming, and profile-selecting wrapper.
 
+## Graphics runtime
+
+The `br` wrapper includes Mesa in its runtime closure. On NixOS it selects
+`/run/opengl-driver`; on other Linux distributions it uses the packaged Mesa
+runtime. It exports the matching GLX/EGL, DRI, VA-API, and Vulkan search paths
+without adding experimental Chromium flags. The existing X11/Wayland choice
+and the profile at `~/.config/br` are unchanged.
+
+On non-NixOS systems with the proprietary NVIDIA driver, launch `br` through a
+system driver wrapper such as NixGL so the userspace libraries match the loaded
+kernel driver. That configuration is outside the packaged Mesa fallback.
+
 ## Updating
 
 Check the official Linux Stable channel without changing files:
@@ -142,11 +152,14 @@ Apply an update locally:
 The updater reads Brave's official Linux x64 Stable channel endpoint (not
 GitHub's ambiguous `latest` release). It rejects beta, nightly, arbitrary
 `--version` values, and downgrades. It fetches the tagged core, regenerates all
-Brave DEPS hashes and npm metadata, updates the nixpkgs lock, verifies an exact
-Chromium version match, and runs the lightweight checks. If nixpkgs has not yet
-packaged Brave's Chromium revision, the update fails and restores both metadata
-files; retry after nixpkgs catches up. Other Brave channels are never followed
-by scheduled automation.
+Brave DEPS hashes and dependency metadata, updates the nixpkgs lock, verifies
+an exact Chromium version match, and runs the lightweight checks. If nixpkgs
+has not yet packaged Brave's Chromium revision, the updater exits with the
+temporary status `75` and restores both metadata files. The scheduled workflow
+treats only this status as a successful deferred update, records the reason in
+its job summary, and publishes no PR. Unsupported source formats, hash failures,
+and test failures remain errors. Other Brave channels are never followed by
+scheduled automation.
 
 The scheduled GitHub workflow opens or updates an idempotent
 `automation/brave-VERSION` pull request. Before updating an existing branch it
@@ -154,7 +167,10 @@ requires one unmerged automation commit, the GitHub Actions bot identity, the
 expected commit subject, and changes confined to `flake.lock` and
 `nix/sources.json`. Updates use an exact remote SHA lease; a foreign edit or
 race fails closed. A closed PR is not silently replaced with a duplicate. The
-workflow never merges and never starts the full browser build.
+workflow never merges and never starts the full browser build. After publishing
+a new PR, it closes an older Stable PR only when the bot identity, expected
+subject, one-commit ancestry, and metadata-only file list are all proven. It
+retains the old remote branch.
 
 The updater uses the ephemeral repository `GITHUB_TOKEN` with only
 `contents: write` and `pull-requests: write`. Repository Settings → Actions →
