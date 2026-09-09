@@ -56,6 +56,18 @@
             test ${nixpkgs.lib.escapeShellArg package.pname} = br
             test ${nixpkgs.lib.escapeShellArg package.version} = \
               ${nixpkgs.lib.escapeShellArg sourceMetadata.version}
+            test ${
+              nixpkgs.lib.escapeShellArg (
+                toString (
+                  nixpkgs.lib.all (
+                    patch:
+                    !(nixpkgs.lib.hasInfix "revert-Show-Linux-first-run-terms-of-service-dialog-by-default.patch" (
+                      toString patch
+                    ))
+                  ) package.unwrapped.patches
+                )
+              )
+            } = 1
             touch "$out"
           '';
 

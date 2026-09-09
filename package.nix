@@ -30,6 +30,15 @@ let
     name = "br-browser";
     version = sources.version;
     packageName = "br";
+    # Brave carries the same Linux EULA default change in its own patch set.
+    # Applying nixpkgs' Chromium backport first makes Brave's patch driver
+    # correctly reject the duplicate as already applied.
+    patches = builtins.filter (
+      patch:
+      !(lib.hasInfix "revert-Show-Linux-first-run-terms-of-service-dialog-by-default.patch" (
+        toString patch
+      ))
+    ) (base.patches or [ ]);
     buildTargets = [
       "chrome_sandbox"
       "brave"

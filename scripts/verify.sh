@@ -91,6 +91,10 @@ verify_source() {
     || die "Brave patch walker fix is not applied before the patch driver"
   grep -Fq "PATCH = 'patch'" "$root/patches/0000-fix-brave-patch-walker.patch" \
     || die "Brave patch walker does not use the offset-aware patch backend"
+  grep -Fq \
+    'revert-Show-Linux-first-run-terms-of-service-dialog-by-default.patch' \
+    "$root/package.nix" \
+    || die "duplicate nixpkgs/Brave Linux EULA patch is not filtered"
   grep -Fq 'cp chrome/VERSION chrome/VERSION.chromium' "$root/package.nix" \
     || die "Chromium version sidecar is not generated for the Git-free source"
   ! grep -R -Fq -- '--impure' "$root/package.nix" "$root/nix" \
